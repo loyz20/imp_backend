@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /d/Project/app-iko/backend/src/models -name \"*.js\" -exec basename {} \\\\;)"
+    ]
+  }
+}
