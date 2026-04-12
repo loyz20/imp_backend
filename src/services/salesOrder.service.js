@@ -772,11 +772,27 @@ const mongoGenerateInvoice = async (salesOrderIds, userId) => {
   // Create invoice(s) via finance service — splits obat/alkes
   const invoices = await financeService.createInvoiceFromMultipleSOs(orders, userId);
 
-  // Update all SOs to awaiting_payment and create COGS journals
+  // Build invoice number map by category
+  const invoiceNumberMap = {};
+  for (const inv of invoices) {
+    const cat = inv.invoiceCategory || 'obat';
+    invoiceNumberMap[cat] = inv.invoiceNumber;
+  }
+
+  // Update all SOs to awaiting_payment, set fakturNumber, and create COGS journals
   const now = new Date();
   for (const so of orders) {
     so.status = SO_STATUS.AWAITING_PAYMENT;
     so.updatedBy = userId;
+
+    // Set fakturNumber from matching invoice category
+    const soCat = so.soCategory || 'obat';
+    if (invoiceNumberMap[soCat]) {
+      so.fakturNumber = invoiceNumberMap[soCat];
+    } else if (invoices.length === 1) {
+      so.fakturNumber = invoices[0].invoiceNumber;
+    }
+
     // eslint-disable-next-line no-await-in-loop
     await so.save();
 
@@ -822,11 +838,25 @@ const mysqlGenerateInvoice = async (salesOrderIds, userId) => {
   // Create invoice(s) via finance service — splits obat/alkes
   const invoices = await financeService.createInvoiceFromMultipleSOs(orders, userId);
 
-  // Update all SOs to awaiting_payment and create COGS journals
+  // Build invoice number map by category
+  const invoiceNumberMap = {};
+  for (const inv of invoices) {
+    const cat = inv.invoiceCategory || 'obat';
+    invoiceNumberMap[cat] = inv.invoiceNumber;
+  }
+
+  // Update all SOs to awaiting_payment, set fakturNumber, and create COGS journals
   const now = new Date();
   for (const so of orders) {
+    // Determine fakturNumber from matching invoice category
+    const soCat = so.soCategory || 'obat';
+    let fakturNumber = invoiceNumberMap[soCat] || null;
+    if (!fakturNumber && invoices.length === 1) {
+      fakturNumber = invoices[0].invoiceNumber;
+    }
+
     // eslint-disable-next-line no-await-in-loop
-    await pool.query('UPDATE sales_orders SET status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?', [SO_STATUS.AWAITING_PAYMENT, userId, so._id]);
+    await pool.query('UPDATE sales_orders SET status = ?, faktur_number = COALESCE(?, faktur_number), updated_by = ?, updated_at = NOW() WHERE id = ?', [SO_STATUS.AWAITING_PAYMENT, fakturNumber, userId, so._id]);
 
     const deliveryPayload = {
       _id: so._id,
