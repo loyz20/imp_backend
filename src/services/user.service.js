@@ -1,16 +1,16 @@
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const { paginate } = require('../helpers');
+const config = require('../config');
+const MySQLUserService = require('./user.service.mysql');
 
-/**
- * Get paginated list of users with search & filter
- */
-const getUsers = async (queryParams) => {
+// ─── Mongo Implementations ───
+
+const mongoGetUsers = async (queryParams) => {
   const { page, limit, search, role, isActive, sort } = queryParams;
 
   const filter = {};
 
-  // Search by name or email
   if (search) {
     filter.$or = [
       { name: { $regex: search, $options: 'i' } },
@@ -33,10 +33,7 @@ const getUsers = async (queryParams) => {
   });
 };
 
-/**
- * Get single user by ID
- */
-const getUserById = async (userId) => {
+const mongoGetUserById = async (userId) => {
   const user = await User.findById(userId);
   if (!user) {
     throw ApiError.notFound('User not found');
@@ -44,10 +41,7 @@ const getUserById = async (userId) => {
   return user;
 };
 
-/**
- * Create a new user (admin)
- */
-const createUser = async (userData) => {
+const mongoCreateUser = async (userData) => {
   const existing = await User.findOne({ email: userData.email.toLowerCase() });
   if (existing) {
     throw ApiError.conflict('Email already registered');
@@ -57,11 +51,7 @@ const createUser = async (userData) => {
   return user;
 };
 
-/**
- * Update user by ID (admin)
- */
-const updateUser = async (userId, updateData) => {
-  // Prevent password update via this method
+const mongoUpdateUser = async (userId, updateData) => {
   delete updateData.password;
   delete updateData.refreshToken;
   delete updateData.passwordResetToken;
@@ -71,7 +61,6 @@ const updateUser = async (userId, updateData) => {
   delete updateData.loginAttempts;
   delete updateData.lockUntil;
 
-  // Check email uniqueness if email is being updated
   if (updateData.email) {
     const existing = await User.findOne({
       email: updateData.email.toLowerCase(),
@@ -95,10 +84,7 @@ const updateUser = async (userId, updateData) => {
   return user;
 };
 
-/**
- * Delete user by ID (soft delete: deactivate)
- */
-const deleteUser = async (userId, currentUserId) => {
+const mongoDeleteUser = async (userId, currentUserId) => {
   if (userId === currentUserId) {
     throw ApiError.badRequest('You cannot delete your own account');
   }
@@ -115,10 +101,7 @@ const deleteUser = async (userId, currentUserId) => {
   return user;
 };
 
-/**
- * Change user role
- */
-const changeRole = async (userId, role, currentUserId) => {
+const mongoChangeRole = async (userId, role, currentUserId) => {
   if (userId === currentUserId) {
     throw ApiError.badRequest('You cannot change your own role');
   }
@@ -134,10 +117,7 @@ const changeRole = async (userId, role, currentUserId) => {
   return user;
 };
 
-/**
- * Change user active status
- */
-const changeStatus = async (userId, isActive, currentUserId) => {
+const mongoChangeStatus = async (userId, isActive, currentUserId) => {
   if (userId === currentUserId) {
     throw ApiError.badRequest('You cannot change your own status');
   }
@@ -149,7 +129,6 @@ const changeStatus = async (userId, isActive, currentUserId) => {
 
   user.isActive = isActive;
 
-  // If deactivating, invalidate refresh token
   if (!isActive) {
     user.refreshToken = undefined;
   }
@@ -159,10 +138,7 @@ const changeStatus = async (userId, isActive, currentUserId) => {
   return user;
 };
 
-/**
- * Get user stats (dashboard)
- */
-const getUserStats = async () => {
+const mongoGetUserStats = async () => {
   const [total, active, inactive, roleStats] = await Promise.all([
     User.countDocuments(),
     User.countDocuments({ isActive: true }),
@@ -178,6 +154,64 @@ const getUserStats = async () => {
   });
 
   return { total, active, inactive, byRole };
+};
+
+// ─── Exported Functions with Provider Branching ───
+
+const getUsers = async (queryParams) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.getUsers(queryParams);
+  }
+  return mongoGetUsers(queryParams);
+};
+
+const getUserById = async (userId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.getUserById(userId);
+  }
+  return mongoGetUserById(userId);
+};
+
+const createUser = async (userData) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.createUser(userData);
+  }
+  return mongoCreateUser(userData);
+};
+
+const updateUser = async (userId, updateData) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.updateUser(userId, updateData);
+  }
+  return mongoUpdateUser(userId, updateData);
+};
+
+const deleteUser = async (userId, currentUserId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.deleteUser(userId, currentUserId);
+  }
+  return mongoDeleteUser(userId, currentUserId);
+};
+
+const changeRole = async (userId, role, currentUserId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.changeRole(userId, role, currentUserId);
+  }
+  return mongoChangeRole(userId, role, currentUserId);
+};
+
+const changeStatus = async (userId, isActive, currentUserId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.changeStatus(userId, isActive, currentUserId);
+  }
+  return mongoChangeStatus(userId, isActive, currentUserId);
+};
+
+const getUserStats = async () => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLUserService.getUserStats();
+  }
+  return mongoGetUserStats();
 };
 
 module.exports = {

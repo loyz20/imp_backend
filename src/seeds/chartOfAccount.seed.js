@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const config = require('../config');
 const ChartOfAccount = require('../models/ChartOfAccount');
+const { getMySQLPool } = require('../config/database');
 const logger = require('../utils/logger');
 
 const chartOfAccountSeed = [
@@ -15,8 +16,9 @@ const chartOfAccountSeed = [
   { code: '1100', name: 'Kas & Bank', category: 'asset', parentCode: '1000', level: 1 },
   { code: '1200', name: 'Piutang Usaha', category: 'asset', parentCode: '1000', level: 1 },
   { code: '1300', name: 'Persediaan', category: 'asset', parentCode: '1000', level: 1 },
+  { code: '1400', name: 'Pajak Dibayar Dimuka', category: 'asset', parentCode: '1000', level: 1 },
   { code: '2100', name: 'Hutang Usaha', category: 'liability', parentCode: '2000', level: 1 },
-  { code: '2110', name: 'Hutang PPN', category: 'liability', parentCode: '2000', level: 1 },
+  { code: '2110', name: 'PPN Keluaran', category: 'liability', parentCode: '2000', level: 1 },
   { code: '3100', name: 'Modal Disetor', category: 'equity', parentCode: '3000', level: 1 },
   { code: '3200', name: 'Laba Ditahan', category: 'equity', parentCode: '3000', level: 1 },
   { code: '4100', name: 'Pendapatan Penjualan', category: 'revenue', parentCode: '4000', level: 1 },
@@ -28,12 +30,59 @@ const chartOfAccountSeed = [
   { code: '1110', name: 'Kas', category: 'asset', parentCode: '1100', level: 2 },
   { code: '1120', name: 'Bank', category: 'asset', parentCode: '1100', level: 2 },
   { code: '1210', name: 'Piutang Dagang', category: 'asset', parentCode: '1200', level: 2 },
+  { code: '1410', name: 'PPN Masukan', category: 'asset', parentCode: '1400', level: 2 },
   { code: '5210', name: 'Beban Gaji', category: 'expense', parentCode: '5200', level: 2 },
   { code: '5220', name: 'Beban Sewa', category: 'expense', parentCode: '5200', level: 2 },
   { code: '5230', name: 'Beban Utilitas', category: 'expense', parentCode: '5200', level: 2 },
 ];
 
 const seedChartOfAccounts = async () => {
+  if (config.dbProvider === 'mysql') {
+    return seedMySQL();
+  }
+  return seedMongo();
+};
+
+// ─── MySQL seed ───
+const seedMySQL = async () => {
+  const pool = getMySQLPool();
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  // First pass: create/update accounts
+  const codeToId = {};
+  for (const acc of chartOfAccountSeed) {
+    const [rows] = await pool.query('SELECT id FROM chart_of_accounts WHERE code = ?', [acc.code]);
+    if (rows.length) {
+      codeToId[acc.code] = rows[0].id;
+      await pool.query(
+        'UPDATE chart_of_accounts SET name = ?, category = ?, level = ?, is_active = 1, updated_at = NOW() WHERE code = ?',
+        [acc.name, acc.category, acc.level, acc.code],
+      );
+      updatedCount += 1;
+    } else {
+      const id = new mongoose.Types.ObjectId().toString();
+      codeToId[acc.code] = id;
+      await pool.query(
+        'INSERT INTO chart_of_accounts (id, code, name, category, level, balance, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, 1, NOW(), NOW())',
+        [id, acc.code, acc.name, acc.category, acc.level],
+      );
+      createdCount += 1;
+    }
+  }
+
+  // Second pass: set parent_id
+  for (const acc of chartOfAccountSeed) {
+    if (acc.parentCode && codeToId[acc.parentCode] && codeToId[acc.code]) {
+      await pool.query('UPDATE chart_of_accounts SET parent_id = ? WHERE id = ?', [codeToId[acc.parentCode], codeToId[acc.code]]);
+    }
+  }
+
+  logger.info(`Chart of Accounts seeded. created=${createdCount}, updated=${updatedCount}, total=${chartOfAccountSeed.length}`);
+};
+
+// ─── MongoDB seed ───
+const seedMongo = async () => {
   // First pass: create/update accounts without parentId
   const accountMap = {};
   let createdCount = 0;

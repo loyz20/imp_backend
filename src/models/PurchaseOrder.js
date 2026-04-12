@@ -1,17 +1,6 @@
 const mongoose = require('mongoose');
 const { PO_STATUS, SATUAN } = require('../constants');
 
-const approvalHistorySchema = new mongoose.Schema(
-  {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    action: { type: String, enum: ['approved', 'rejected'], required: true },
-    notes: { type: String, trim: true, maxlength: 1000, default: '' },
-    date: { type: Date, default: Date.now },
-    level: { type: Number, default: 1 },
-  },
-  { _id: false },
-);
-
 const poItemSchema = new mongoose.Schema({
   productId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -63,6 +52,12 @@ const purchaseOrderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    poCategory: {
+      type: String,
+      enum: ['obat', 'alkes'],
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: Object.values(PO_STATUS),
@@ -84,10 +79,6 @@ const purchaseOrderSchema = new mongoose.Schema(
       required: [true, 'Order date is required'],
     },
     expectedDeliveryDate: {
-      type: Date,
-      default: null,
-    },
-    approvedAt: {
       type: Date,
       default: null,
     },
@@ -128,9 +119,6 @@ const purchaseOrderSchema = new mongoose.Schema(
       default: '',
     },
 
-    // ── Approval ──
-    approvalHistory: [approvalHistorySchema],
-
     // ── Metadata ──
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -170,35 +158,36 @@ purchaseOrderSchema.methods.calculateTotals = function (ppnRate) {
   this.remainingAmount = Math.max(0, this.totalAmount - (this.paidAmount || 0));
 };
 
+const ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+
 // ─── Pre-save: Auto-generate PO Number & calculate totals ───
 purchaseOrderSchema.pre('save', async function () {
-  // Auto-generate PO number
-  if (this.isNew && !this.poNumber) {
+  // Auto-generate PO number: NNNN/F|A/SP/ROMAN_MONTH/YEAR
+  if (this.isNew && !this.poNumber && this.poCategory) {
     const now = new Date();
-    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const prefix = `SP-${ymd}-`;
+    const year = now.getFullYear();
+    const romanMonth = ROMAN_MONTHS[now.getMonth()];
+    const typeCode = this.poCategory === 'alkes' ? 'A' : 'F';
+    const suffix = `/${typeCode}/SP/${romanMonth}/${year}`;
 
+    const escapedSuffix = suffix.replace(/\//g, '\\/');
     const last = await this.constructor
-      .findOne({ poNumber: { $regex: `^${prefix}` } })
+      .findOne({ poNumber: { $regex: `^\\d{4}${escapedSuffix}$` } })
       .sort({ poNumber: -1 })
       .select('poNumber')
       .lean();
 
     let nextNum = 1;
     if (last) {
-      const lastNum = parseInt(last.poNumber.replace(prefix, ''), 10);
-      nextNum = lastNum + 1;
+      const lastNum = parseInt(last.poNumber.split('/')[0], 10);
+      if (!isNaN(lastNum)) nextNum = lastNum + 1;
     }
-    this.poNumber = `${prefix}${String(nextNum).padStart(4, '0')}`;
+    this.poNumber = `${String(nextNum).padStart(4, '0')}${suffix}`;
   }
 
-  // Calculate totals using PPN rate from settings
+  // Calculate totals using default 11% PPN rate
   if (this.isModified('items') || this.isNew) {
-    const AppSetting = require('./AppSetting');
-    const settings = await AppSetting.getSettings();
-    const isPkp = settings?.company?.tax?.isPkp !== false;
-    const ppnRate = isPkp ? (settings?.company?.tax?.defaultPpnRate ?? 11) : 0;
-    this.calculateTotals(ppnRate);
+    this.calculateTotals(11);
   }
 });
 

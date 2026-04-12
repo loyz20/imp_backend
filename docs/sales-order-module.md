@@ -1,10 +1,12 @@
-# API Contract - Modul Sales Order (Penjualan)
+# API Contract - Modul Sales Order (Surat Jalan / Penjualan)
 
 **Modul:** Sales Order Management
 **Base URL:** `http://localhost:5000/api/v1`
 **Prefix:** `/sales-orders`
 
-> Sales Order mengelola alur penjualan dari pembuatan order hingga pengiriman dan penyelesaian. Terintegrasi dengan modul inventory (mutasi stok) dan finance (invoice & jurnal HPP).
+> Sales Order mengelola alur penjualan dari pembuatan order (surat jalan) hingga pengiriman, pembuatan invoice, dan penyelesaian. Terintegrasi dengan modul inventory (mutasi stok) dan finance (invoice & jurnal HPP).
+>
+> **Catatan:** Nomor surat jalan menggunakan format `NNNN/F/SJ/ROMAN_MONTH/IMP/YEAR` (obat) atau `NNNN/A/SJ/ROMAN_MONTH/IMP/YEAR` (alkes). Jika SO memiliki item campuran obat & alkes, otomatis **dipisah menjadi 2 SO**. Satu invoice dapat mencakup **beberapa surat jalan** sekaligus melalui endpoint `generate-invoice`.
 
 ---
 
@@ -28,7 +30,9 @@
   _id: ObjectId,
 
   // ── Identitas ──
-  invoiceNumber: String,       // Wajib. Unique. Nomor SO/faktur (max 100)
+  suratJalanNumber: String,    // Auto-generated (NNNN/F|A/SJ/ROMAN/IMP/YEAR). Unique. Max 100
+  fakturNumber: String,        // Opsional. Nomor faktur pajak
+  soCategory: String,          // 'obat' atau 'alkes'. Auto-set berdasarkan golongan produk
   status: String,              // Enum SO_STATUS
 
   // ── Pelanggan ──
@@ -36,16 +40,11 @@
 
   // ── Tanggal ──
   orderDate: Date,             // Wajib
-  expectedDeliveryDate: Date,  // Opsional
-  packedAt: Date,
-  deliveredAt: Date,
-  returnedAt: Date,
-  completedAt: Date,
-
-  // Legacy compatibility fields
-  confirmedAt: Date,
-  processedAt: Date,
-  shippedAt: Date,
+  deliveryDate: Date,          // Opsional (estimasi pengiriman)
+  shippedAt: Date,             // Diisi otomatis saat status → shipped
+  invoicedAt: Date,            // Diisi otomatis saat status → invoiced
+  completedAt: Date,           // Diisi otomatis saat status → completed
+  returnedAt: Date,            // Diisi otomatis saat status → returned
 
   // ── Pengiriman & Pembayaran ──
   shippingAddress: String,     // Max 500. Auto-fill dari alamat customer
@@ -66,8 +65,11 @@
 
   // ── Kalkulasi ──
   subtotal: Number,            // Sum of item subtotals
+  ppnRate: Number,             // PPN rate (%)
   ppnAmount: Number,           // Berdasarkan PPN rate di settings
   totalAmount: Number,         // subtotal + ppnAmount
+  paidAmount: Number,          // Jumlah yang sudah dibayar
+  remainingAmount: Number,     // Sisa tagihan
 
   notes: String,               // Max 1000
 
@@ -78,9 +80,27 @@
 }
 ```
 
+### Invoice Schema (terkait SO)
+
+```javascript
+{
+  _id: ObjectId,
+  invoiceNumber: String,       // Auto-generated (INV-YYYYMMDD-NNNN)
+  invoiceType: 'sales',
+  salesOrderIds: [ObjectId],   // Array Ref → SalesOrder (1 invoice bisa multi surat jalan)
+  customerId: ObjectId,
+  status: String,              // INVOICE_STATUS
+  items: [...],                // Gabungan items dari semua SO terkait
+  subtotal, ppnRate, ppnAmount, totalAmount, paidAmount, remainingAmount,
+  paymentTermDays: Number,
+  // ...timestamps
+}
+```
+
 Catatan:
 - PPN dihitung dari App Setting: `company.tax.isPkp` dan `company.tax.defaultPpnRate`.
-- Sales Order berperan sebagai alur pengiriman utama (tanpa endpoint Delivery terpisah).
+- Sales Order berperan sebagai surat jalan (delivery note). Invoice dibuat terpisah via endpoint `generate-invoice`.
+- Satu invoice dapat mencakup beberapa surat jalan dari customer yang sama.
 
 ---
 
@@ -91,12 +111,10 @@ Catatan:
 | Value | Keterangan |
 |-------|------------|
 | `draft` | Status awal setelah SO dibuat |
-| `packed` | Barang sudah dipacking, mutasi stok OUT dibuat |
-| `delivered` | Terkirim penuh, invoice & jurnal HPP otomatis dibuat |
-| `partial_delivered` | Pengiriman sebagian |
-| `returned` | Order diretur, stok direvert |
+| `shipped` | Barang dikirim, mutasi stok OUT dibuat |
+| `awaiting_payment` | Invoice telah di-generate, menunggu pembayaran |
 | `completed` | Selesai |
-| `canceled` | Dibatalkan, stok direvert |
+| `returned` | Order diretur, stok direvert |
 
 ### Legacy Status Mapping
 
@@ -104,13 +122,19 @@ Status lama otomatis dinormalisasi ke status baru:
 
 | Legacy | Normalized |
 |--------|------------|
-| `confirmed` | `packed` |
-| `processing` | `packed` |
-| `ready_to_ship` | `packed` |
-| `partial_shipped` | `partial_delivered` |
-| `shipped` | `delivered` |
+| `confirmed` | `shipped` |
+| `processing` | `shipped` |
+| `ready_to_ship` | `shipped` |
+| `packed` | `shipped` |
+| `partial_shipped` | `shipped` |
+| `shipped` | `shipped` |
+| `delivered` | `awaiting_payment` |
+| `partial_delivered` | `awaiting_payment` |
+| `invoiced` | `awaiting_payment` |
+| `awaiting_payment` | `awaiting_payment` |
 | `completed` | `completed` |
-| `cancelled` | `canceled` |
+| `cancelled` / `canceled` | `returned` |
+| `returned` | `returned` |
 
 ---
 
@@ -120,10 +144,11 @@ Status lama otomatis dinormalisasi ke status baru:
 |--------|------|-------|-----------|
 | GET | `/sales-orders` | All 6 roles | Daftar SO (paginated) |
 | GET | `/sales-orders/stats` | All 6 roles | Statistik SO |
-| GET | `/sales-orders/:id` | All 6 roles | Detail SO |
 | POST | `/sales-orders` | SA, Admin, Sales | Buat SO baru |
+| POST | `/sales-orders/generate-invoice` | SA, Admin, Keuangan, Sales | Generate invoice dari beberapa surat jalan (status → awaiting_payment) |
+| GET | `/sales-orders/:id` | All 6 roles | Detail SO |
 | PUT | `/sales-orders/:id` | SA, Admin, Sales | Update SO (draft only) |
-| DELETE | `/sales-orders/:id` | SA, Admin | Hapus SO (draft/canceled only) |
+| DELETE | `/sales-orders/:id` | SA, Admin | Hapus SO (draft only) |
 | PATCH | `/sales-orders/:id/status` | SA, Admin, Sales | Ubah status SO |
 
 > **Auth:** Semua endpoint memerlukan Bearer Token.
@@ -142,7 +167,7 @@ GET /sales-orders
 |-------|------|---------|------------|
 | `page` | `integer` | `1` | Halaman (min 1) |
 | `limit` | `integer` | `10` | Max 100 |
-| `search` | `string` | | Cari di `invoiceNumber` (max 200) |
+| `search` | `string` | | Cari di `suratJalanNumber` dan `fakturNumber` (max 200) |
 | `status` | `string` | | Filter status (comma-separated) |
 | `customerId` | `string` | | Filter customer (MongoDB ID) |
 | `dateFrom` | `date` | | Filter tanggal mulai (ISO-8601) |
@@ -164,13 +189,10 @@ GET /sales-orders/stats
   "success": true,
   "data": {
     "total": 120,
-    "draft": 10,
-    "packed": 20,
-    "delivered": 60,
-    "partialDelivered": 8,
+    "shipped": 25,
+    "awaitingPayment": 60,
     "returned": 5,
-    "completed": 15,
-    "canceled": 2,
+    "completed": 30,
     "totalValue": 950000000,
     "totalValueThisMonth": 210000000,
     "averageOrderValue": 12179487,
@@ -199,10 +221,11 @@ POST /sales-orders
 
 | Field | Type | Required | Validasi |
 |-------|------|----------|----------|
-| `invoiceNumber` | `string` | ✅ | Max 100. Unique |
+| `suratJalanNumber` | `string` | ❌ | Max 100. Unique. Auto-generated `NNNN/F\|A/SJ/ROMAN/IMP/YEAR` |
+| `fakturNumber` | `string` | ❌ | Max 100. Nomor faktur pajak |
 | `customerId` | `string` | ✅ | Valid MongoDB ID. Customer harus aktif |
 | `orderDate` | `date` | ✅ | ISO-8601 |
-| `expectedDeliveryDate` | `date` | ❌ | ISO-8601 |
+| `deliveryDate` | `date` | ❌ | ISO-8601 (estimasi pengiriman) |
 | `paymentTermDays` | `number` | ❌ | 0-365. Default dari settings |
 | `shippingAddress` | `string` | ❌ | Max 500. Auto-fill dari alamat customer |
 | `notes` | `string` | ❌ | Max 1000 |
@@ -216,16 +239,44 @@ POST /sales-orders
 | `items[].expiryDate` | `date` | ❌ | ISO-8601 |
 | `items[].notes` | `string` | ❌ | Max 500 |
 
-> Kompatibilitas: Field `noFaktur` diterima sebagai alias untuk `invoiceNumber`.
+> Kompatibilitas: Field `noFaktur` diterima sebagai alias untuk `fakturNumber`.
 
 **Efek saat create:**
 
 - Status awal otomatis `draft`.
+- Items otomatis diklasifikasi berdasarkan `golongan` produk:
+  - **Obat** (semua golongan selain alkes) → `soCategory: 'obat'`, nomor `NNNN/F/SJ/ROMAN/IMP/YEAR`
+  - **Alkes** (golongan alkes) → `soCategory: 'alkes'`, nomor `NNNN/A/SJ/ROMAN/IMP/YEAR`
+- Jika items campuran obat & alkes, **otomatis dipisah menjadi 2 SO terpisah** (response berupa array).
+- `suratJalanNumber` auto-generated. Penomoran sequential per kategori per bulan.
 - `subtotal`, `ppnAmount`, `totalAmount` dihitung otomatis berdasarkan items dan PPN rate dari settings.
 - `shippingAddress` auto-fill dari alamat customer jika tidak diisi.
 - `paymentTermDays` auto-fill dari `settings.invoice.defaultPaymentTermDays` jika tidak diisi (default: 30).
 
-**Response `201 Created`**
+**Response `201 Created`:**
+
+```json
+{
+  "success": true,
+  "message": "2 Sales orders created successfully (obat & alkes dipisah)",
+  "data": [
+    {
+      "_id": "...",
+      "suratJalanNumber": "0001/F/SJ/IV/IMP/2026",
+      "soCategory": "obat",
+      "items": [...]
+    },
+    {
+      "_id": "...",
+      "suratJalanNumber": "0001/A/SJ/IV/IMP/2026",
+      "soCategory": "alkes",
+      "items": [...]
+    }
+  ]
+}
+```
+
+> Jika semua items satu kategori, response tetap berupa array dengan 1 elemen.
 
 **Error Responses:**
 
@@ -233,7 +284,7 @@ POST /sales-orders
 |------|---------|
 | `400` | Customer tidak aktif / SIA expired |
 | `400` | Produk tidak ditemukan atau tidak aktif |
-| `409` | Invoice number sudah digunakan |
+| `409` | Nomor surat jalan sudah digunakan |
 | `422` | Validasi gagal |
 
 ---
@@ -248,7 +299,7 @@ PUT /sales-orders/:id
 - Hanya boleh saat status `draft`.
 - Semua field dari create bisa diupdate (semua opsional).
 - Validasi ulang customer dan produk jika diubah.
-- Cek duplikasi `invoiceNumber` terhadap SO lain.
+- Cek duplikasi `suratJalanNumber` terhadap SO lain.
 - Kalkulasi total dihitung ulang dengan PPN rate terkini.
 
 ---
@@ -260,7 +311,7 @@ DELETE /sales-orders/:id
 ```
 
 **Aturan:**
-- Hanya boleh saat status `draft` atau `canceled`.
+- Hanya boleh saat status `draft`.
 
 ---
 
@@ -281,48 +332,88 @@ PATCH /sales-orders/:id/status
 
 | Transisi | Efek |
 |----------|------|
-| → `packed` | Mutasi stok OUT dibuat via inventory service. `packedAt` diisi |
-| → `partial_delivered` | `shippedAt` diisi (jika belum) |
-| → `delivered` | `shippedAt` diisi (jika belum), `deliveredAt` diisi. Invoice penjualan otomatis dibuat (non-blocking). Jurnal HPP otomatis dibuat (non-blocking) |
+| → `shipped` | Mutasi stok OUT dibuat via inventory service. `shippedAt` diisi |
+| → `awaiting_payment` | (status tracking saja — biasanya via `generate-invoice`) |
 | → `completed` | `completedAt` diisi |
 | → `returned` | Mutasi stok direvert. `returnedAt` diisi |
-| → `canceled` | Mutasi stok direvert |
 
-> **Non-blocking:** Pembuatan invoice dan jurnal HPP saat transisi ke `delivered` bersifat non-blocking. Jika gagal, perubahan status tetap tersimpan.
+---
+
+### 11.8 Generate Invoice (Multi Surat Jalan)
+
+```
+POST /sales-orders/generate-invoice
+```
+
+**Request Body:**
+
+| Field | Type | Required | Validasi |
+|-------|------|----------|----------|
+| `salesOrderIds` | `array` | ✅ | Min 1. Array of valid MongoDB IDs |
+
+**Aturan:**
+- Semua SO yang dipilih harus berstatus `shipped`.
+- Semua SO harus milik **customer yang sama**.
+- Items dari semua SO digabungkan menjadi satu invoice.
+- Payment term diambil dari nilai tertinggi di antara SO yang dipilih.
+
+**Efek:**
+- 1 invoice penjualan dibuat dengan `salesOrderIds` berisi semua SO yang dipilih.
+- Invoice number auto-generated (`INV-YYYYMMDD-NNNN`), status `sent`.
+- Semua SO terpilih diubah ke status `awaiting_payment`.
+- Jurnal HPP (COGS) dibuat untuk setiap SO (non-blocking).
+
+**Response `201 Created`:**
+
+```json
+{
+  "success": true,
+  "message": "Invoice berhasil dibuat dari surat jalan",
+  "data": {
+    "_id": "...",
+    "invoiceNumber": "INV-20260412-0001",
+    "salesOrderIds": ["id1", "id2"],
+    "customerId": "...",
+    "items": [...],
+    "totalAmount": 5000000
+  }
+}
+```
+
+**Error Responses:**
+
+| Code | Kondisi |
+|------|---------|
+| `400` | Salah satu SO belum berstatus `shipped` |
+| `400` | SO milik customer yang berbeda |
+| `400` | SO tidak ditemukan |
+| `422` | Validasi gagal |
 
 ---
 
 ## Status Flow
 
 ```text
-draft → packed → delivered → completed
-  |                |    \
-  |                |     → partial_delivered → delivered
-  |                |            |     \
-  |                |            |      → returned
-  |                |            |      → completed
-  |                |            |
-  |                → returned
-  |
-  → canceled
+draft → shipped → awaiting_payment → completed
+                    |                   |
+                    → returned          → returned
 ```
+
+> **Generate Invoice:** Saat `POST /generate-invoice` dipanggil, SO yang berstatus `shipped` langsung berubah ke `awaiting_payment` bersamaan dengan pembuatan invoice.
 
 **Transisi yang diizinkan:**
 
 | Dari | Ke |
 |------|----|
-| `draft` | `packed`, `canceled` |
-| `packed` | `delivered` |
-| `delivered` | `partial_delivered`, `returned`, `completed` |
-| `partial_delivered` | `delivered`, `returned`, `completed` |
+| `draft` | `shipped` |
+| `shipped` | `awaiting_payment`, `returned` |
+| `awaiting_payment` | `completed`, `returned` |
 
 **Timestamp per status:**
 
 | Status | Timestamp |
 |--------|-----------|
-| `packed` | `packedAt` |
-| `partial_delivered` / `delivered` | `shippedAt` (jika belum terisi) |
-| `delivered` | `deliveredAt` |
+| `shipped` | `shippedAt` |
 | `completed` | `completedAt` |
 | `returned` | `returnedAt` |
 
@@ -332,10 +423,10 @@ draft → packed → delivered → completed
 
 | Modul | Arah | Aksi |
 |-------|------|------|
-| Inventory | SO → Stock | Transisi ke `packed` membuat mutasi stok OUT |
-| Inventory | SO → Stock | Transisi ke `returned`/`canceled` merevert mutasi stok |
-| Finance | SO → Invoice | Transisi ke `delivered` auto-create invoice penjualan |
-| Finance | SO → GL | Transisi ke `delivered` auto-create jurnal HPP |
+| Inventory | SO → Stock | Transisi ke `shipped` membuat mutasi stok OUT |
+| Inventory | SO → Stock | Transisi ke `returned` merevert mutasi stok |
+| Finance | SO → Invoice | `POST /generate-invoice` membuat 1 invoice dari 1+ surat jalan, status → `awaiting_payment` |
+| Finance | SO → GL | `POST /generate-invoice` auto-create jurnal HPP per SO |
 
 ---
 
@@ -345,9 +436,42 @@ draft → packed → delivered → completed
 2. **Produk harus valid dan aktif** — semua item harus merujuk produk yang ada dan aktif.
 3. **`shippingAddress` auto-fill** — dari alamat customer (`street, city, province`) jika tidak diisi.
 4. **`paymentTermDays` auto-fill** — dari `settings.invoice.defaultPaymentTermDays` jika tidak diisi.
-5. **Update hanya saat `draft`** — SO yang sudah di-pack tidak bisa diedit.
-6. **Delete hanya saat `draft` atau `canceled`** — SO aktif tidak bisa dihapus.
-7. **Invoice otomatis saat `delivered`** — invoice penjualan dibuat non-blocking, status `sent`.
-8. **Jurnal HPP otomatis saat `delivered`** — jurnal COGS dibuat non-blocking.
-9. **Revert stok saat `returned`/`canceled`** — mutasi stok OUT dikembalikan.
-10. **`invoiceNumber` harus unik** — validasi duplikasi saat create dan update.
+5. **Update hanya saat `draft`** — SO yang sudah shipped tidak bisa diedit.
+6. **Delete hanya saat `draft`** — SO aktif tidak bisa dihapus.
+7. **Generate invoice dari shipped** — hanya SO berstatus `shipped` yang bisa di-generate invoice.
+8. **Multi surat jalan per invoice** — 1 invoice bisa mencakup beberapa surat jalan, asalkan customer sama.
+9. **Jurnal HPP saat generate invoice** — jurnal COGS dibuat per SO (non-blocking).
+10. **Revert stok saat `returned`** — mutasi stok OUT dikembalikan.
+11. **`suratJalanNumber` harus unik** — validasi duplikasi saat create dan update.
+12. **Auto-number format** — `NNNN/F/SJ/ROMAN/IMP/YEAR` (obat) atau `NNNN/A/SJ/ROMAN/IMP/YEAR` (alkes). Sequential per kategori per bulan.
+13. **Auto-split obat/alkes** — jika items campuran, otomatis dipisah menjadi 2 SO berdasarkan golongan produk.
+
+---
+
+## Dual-Provider (MySQL / MongoDB)
+
+Service layer mendukung dua database provider melalui `config.dbProvider`:
+
+| Provider | Konfigurasi |
+|----------|-------------|
+| `mongo` (default) | Menggunakan Mongoose models |
+| `mysql` | Menggunakan `mysql2/promise` connection pool |
+
+### MySQL Table Structure
+
+**`sales_orders`:**
+- `surat_jalan_number` VARCHAR(100) — nomor surat jalan (`NNNN/F|A/SJ/ROMAN/IMP/YEAR`)
+- `faktur_number` VARCHAR(100) — nomor faktur pajak
+- `so_category` VARCHAR(10) — kategori SO (`obat` / `alkes`)
+- `status`, `customer_id`, `order_date`, `delivery_date`, `payment_term_days`
+- `subtotal`, `ppn_rate`, `ppn_amount`, `total_amount`, `paid_amount`, `remaining_amount`
+- `shipped_at`, `completed_at`, `returned_at`
+
+**`invoices` (terkait SO):**
+- `sales_order_id` TEXT — JSON array of SO IDs (e.g. `["id1","id2"]`)
+- `invoice_type` = `'sales'`
+
+- Setiap fungsi service memiliki varian `mongo*` dan `mysql*`.
+- Fungsi ekspor (e.g. `getSalesOrders`, `changeStatus`, `generateInvoice`) secara otomatis memilih implementasi berdasarkan `config.dbProvider`.
+- Side effects (mutasi stok, invoice, jurnal HPP) berlaku di kedua provider.
+- Legacy status normalisasi berlaku di kedua provider.

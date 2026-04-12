@@ -37,17 +37,6 @@ const createSupplier = [
     .withMessage('Phone must be max 30 characters')
     .matches(/^[0-9+\-\s()]*$/)
     .withMessage('Phone must contain only numbers, +, -, spaces, and parentheses'),
-  body('email')
-    .optional({ values: 'falsy' })
-    .trim()
-    .isEmail()
-    .withMessage('Please provide a valid email')
-    .normalizeEmail(),
-  body('website')
-    .optional({ values: 'falsy' })
-    .trim()
-    .isURL()
-    .withMessage('Please provide a valid URL'),
   body('address.street')
     .optional()
     .trim()
@@ -63,34 +52,33 @@ const createSupplier = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Province must be max 100 characters'),
-  body('address.postalCode')
-    .optional()
-    .trim()
-    .isLength({ max: 10 })
-    .withMessage('Postal code must be max 10 characters'),
-  body('address.country')
+  body('izinSarana.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Country must be max 100 characters'),
-  body('pbfLicense.number')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('PBF license number must be max 100 characters'),
-  body('pbfLicense.expiryDate')
+    .withMessage('Izin Sarana number must be max 100 characters'),
+  body('izinSarana.expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('PBF license expiry date must be a valid date'),
-  body('cdobCertificate.number')
+    .withMessage('Izin Sarana expiry date must be a valid date'),
+  body('cdobCdakb.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('CDOB certificate number must be max 100 characters'),
-  body('cdobCertificate.expiryDate')
+    .withMessage('CDOB/CDAKB number must be max 100 characters'),
+  body('cdobCdakb.expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('CDOB certificate expiry date must be a valid date'),
+    .withMessage('CDOB/CDAKB expiry date must be a valid date'),
+  body('sipSik.number')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('SIP/SIK number must be max 100 characters'),
+  body('sipSik.expiryDate')
+    .optional()
+    .isISO8601()
+    .withMessage('SIP/SIK expiry date must be a valid date'),
   body('paymentTermDays')
     .optional()
     .isInt({ min: 0, max: 365 })
@@ -152,17 +140,6 @@ const updateSupplier = [
     .withMessage('Phone must be max 30 characters')
     .matches(/^[0-9+\-\s()]*$/)
     .withMessage('Phone must contain only numbers, +, -, spaces, and parentheses'),
-  body('email')
-    .optional({ values: 'falsy' })
-    .trim()
-    .isEmail()
-    .withMessage('Please provide a valid email')
-    .normalizeEmail(),
-  body('website')
-    .optional({ values: 'falsy' })
-    .trim()
-    .isURL()
-    .withMessage('Please provide a valid URL'),
   body('address.street')
     .optional()
     .trim()
@@ -178,34 +155,33 @@ const updateSupplier = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Province must be max 100 characters'),
-  body('address.postalCode')
-    .optional()
-    .trim()
-    .isLength({ max: 10 })
-    .withMessage('Postal code must be max 10 characters'),
-  body('address.country')
+  body('izinSarana.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Country must be max 100 characters'),
-  body('pbfLicense.number')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('PBF license number must be max 100 characters'),
-  body('pbfLicense.expiryDate')
+    .withMessage('Izin Sarana number must be max 100 characters'),
+  body('izinSarana.expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('PBF license expiry date must be a valid date'),
-  body('cdobCertificate.number')
+    .withMessage('Izin Sarana expiry date must be a valid date'),
+  body('cdobCdakb.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('CDOB certificate number must be max 100 characters'),
-  body('cdobCertificate.expiryDate')
+    .withMessage('CDOB/CDAKB number must be max 100 characters'),
+  body('cdobCdakb.expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('CDOB certificate expiry date must be a valid date'),
+    .withMessage('CDOB/CDAKB expiry date must be a valid date'),
+  body('sipSik.number')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('SIP/SIK number must be max 100 characters'),
+  body('sipSik.expiryDate')
+    .optional()
+    .isISO8601()
+    .withMessage('SIP/SIK expiry date must be a valid date'),
   body('paymentTermDays')
     .optional()
     .isInt({ min: 0, max: 365 })

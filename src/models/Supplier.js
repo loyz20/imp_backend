@@ -6,21 +6,11 @@ const addressSchema = new mongoose.Schema(
     street: { type: String, trim: true, maxlength: 500, default: null },
     city: { type: String, trim: true, maxlength: 100, default: null },
     province: { type: String, trim: true, maxlength: 100, default: null },
-    postalCode: { type: String, trim: true, maxlength: 10, default: null },
-    country: { type: String, trim: true, default: 'Indonesia' },
   },
   { _id: false },
 );
 
-const pbfLicenseSchema = new mongoose.Schema(
-  {
-    number: { type: String, trim: true, maxlength: 100, default: null },
-    expiryDate: { type: Date, default: null },
-  },
-  { _id: false },
-);
-
-const cdobCertificateSchema = new mongoose.Schema(
+const licenseSchema = new mongoose.Schema(
   {
     number: { type: String, trim: true, maxlength: 100, default: null },
     expiryDate: { type: Date, default: null },
@@ -72,17 +62,6 @@ const supplierSchema = new mongoose.Schema(
       maxlength: 30,
       default: null,
     },
-    email: {
-      type: String,
-      trim: true,
-      lowercase: true,
-      default: null,
-    },
-    website: {
-      type: String,
-      trim: true,
-      default: null,
-    },
 
     // ── Alamat ──
     address: {
@@ -90,13 +69,17 @@ const supplierSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
-    // ── Lisensi & Sertifikasi PBF ──
-    pbfLicense: {
-      type: pbfLicenseSchema,
+    // ── Perizinan ──
+    izinSarana: {
+      type: licenseSchema,
       default: () => ({}),
     },
-    cdobCertificate: {
-      type: cdobCertificateSchema,
+    cdobCdakb: {
+      type: licenseSchema,
+      default: () => ({}),
+    },
+    sipSik: {
+      type: licenseSchema,
       default: () => ({}),
     },
 
@@ -160,19 +143,17 @@ supplierSchema.index({ name: 1 }, { unique: true, collation: { locale: 'en', str
 supplierSchema.index({ createdAt: -1 });
 supplierSchema.index({ 'address.city': 1 });
 supplierSchema.index(
-  { name: 'text', code: 'text', contactPerson: 'text', email: 'text', phone: 'text' },
+  { name: 'text', code: 'text', contactPerson: 'text', phone: 'text' },
   { name: 'supplier_search' },
 );
 
 // ─── Pre-save: Auto-generate Code ───
 supplierSchema.pre('save', async function () {
   if (this.isNew && !this.code) {
-    const now = new Date();
-    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const prefix = `SUP-${ymd}-`;
+    const prefix = 'S';
 
     const lastSupplier = await this.constructor
-      .findOne({ code: { $regex: `^${prefix}` } })
+      .findOne({ code: { $regex: `^${prefix}\\d+$` } })
       .sort({ code: -1 })
       .select('code')
       .lean();

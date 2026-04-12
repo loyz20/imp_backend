@@ -93,6 +93,8 @@ const settingsSchema = new Schema(
         cdob: { type: licenseSchema, default: () => ({}) },
       },
       responsiblePharmacist: { type: pharmacistSchema, default: () => ({}) },
+      pharmacistObat: { type: pharmacistSchema, default: () => ({}) },
+      pharmacistAlkes: { type: pharmacistSchema, default: () => ({}) },
       tax: { type: taxSchema, default: () => ({}) },
     },
 
@@ -313,6 +315,22 @@ settingsSchema.methods.getLicenseWarnings = function () {
   }
   if (pharm?.straExpiry) {
     checkLicense('STRA', { number: pharm.straNumber, expiryDate: pharm.straExpiry });
+  }
+
+  const pharmObat = this.company?.pharmacistObat;
+  if (pharmObat?.sipaExpiry) {
+    checkLicense('SIPA (Obat)', { number: pharmObat.sipaNumber, expiryDate: pharmObat.sipaExpiry });
+  }
+  if (pharmObat?.straExpiry) {
+    checkLicense('STRA (Obat)', { number: pharmObat.straNumber, expiryDate: pharmObat.straExpiry });
+  }
+
+  const pharmAlkes = this.company?.pharmacistAlkes;
+  if (pharmAlkes?.sipaExpiry) {
+    checkLicense('SIPA (Alkes)', { number: pharmAlkes.sipaNumber, expiryDate: pharmAlkes.sipaExpiry });
+  }
+  if (pharmAlkes?.straExpiry) {
+    checkLicense('STRA (Alkes)', { number: pharmAlkes.straNumber, expiryDate: pharmAlkes.straExpiry });
   }
 
   warnings.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);

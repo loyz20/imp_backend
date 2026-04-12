@@ -34,6 +34,18 @@ const createGoodsReceiving = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Invoice number must be max 100 characters'),
+  body('subtotal')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Subtotal harus minimal 0'),
+  body('ppnAmount')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('PPN harus minimal 0'),
+  body('grandTotal')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Grand total harus minimal 0'),
   body('notes')
     .optional()
     .trim()
@@ -125,6 +137,18 @@ const updateGoodsReceiving = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Invoice number must be max 100 characters'),
+  body('subtotal')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Subtotal harus minimal 0'),
+  body('ppnAmount')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('PPN harus minimal 0'),
+  body('grandTotal')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Grand total harus minimal 0'),
   body('notes')
     .optional()
     .trim()

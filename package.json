@@ -10,6 +10,8 @@
     "seed:users:force": "node src/seeds/user.seed.js --force",
     "seed:products": "node src/seeds/product.seed.js",
     "seed:products:force": "node src/seeds/product.seed.js --force",
+    "migrate:mongo:mysql": "node scripts/migrate-mongo-to-mysql.js",
+    "migrate:core:mysql": "node scripts/migrate-core-to-mysql.js",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.js\""
@@ -35,6 +37,7 @@
     "mongoose": "^9.3.3",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
+    "mysql2": "^3.20.0",
     "pdfkit": "^0.18.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",

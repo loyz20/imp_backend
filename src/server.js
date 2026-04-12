@@ -3,11 +3,14 @@ dotenv.config();
 
 const app = require('./app');
 const config = require('./config');
-const connectDB = require('./config/database');
+const { connectDB, closeDB } = require('./config/database');
 const logger = require('./utils/logger');
+
+const seedChartOfAccounts = require('./seeds/chartOfAccount.seed');
 
 const startServer = async () => {
   await connectDB();
+  await seedChartOfAccounts();
 
   const server = app.listen(config.port, () => {
     logger.info(`Server running in ${config.env} mode on port ${config.port}`);
@@ -19,13 +22,13 @@ const startServer = async () => {
   // Graceful shutdown
   const gracefulShutdown = (signal) => {
     logger.info(`${signal} received. Shutting down gracefully...`);
-    server.close(() => {
+    server.close(async () => {
       logger.info('HTTP server closed');
-      const mongoose = require('mongoose');
-      mongoose.connection.close(false, () => {
-        logger.info('MongoDB connection closed');
+      try {
+        await closeDB();
+      } finally {
         process.exit(0);
-      });
+      }
     });
   };
 

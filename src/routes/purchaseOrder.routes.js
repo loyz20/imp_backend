@@ -59,20 +59,4 @@ router.patch(
   poController.changeStatus,
 );
 
-// ─── Approve ───
-router.patch(
-  '/:id/approve',
-  authorize(SUPERADMIN, ADMIN),
-  validate(poValidation.approve),
-  poController.approvePurchaseOrder,
-);
-
-// ─── Reject ───
-router.patch(
-  '/:id/reject',
-  authorize(SUPERADMIN, ADMIN),
-  validate(poValidation.reject),
-  poController.rejectPurchaseOrder,
-);
-
 module.exports = router;

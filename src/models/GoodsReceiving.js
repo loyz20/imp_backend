@@ -118,6 +118,11 @@ const goodsReceivingSchema = new mongoose.Schema(
       },
     },
 
+    // ── Finansial ──
+    subtotal: { type: Number, min: 0, default: 0 },
+    ppnAmount: { type: Number, min: 0, default: 0 },
+    grandTotal: { type: Number, min: 0, default: 0 },
+
     // ── Catatan ──
     notes: {
       type: String,

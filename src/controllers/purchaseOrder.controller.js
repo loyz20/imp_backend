@@ -22,10 +22,12 @@ const getPurchaseOrderById = catchAsync(async (req, res) => {
 });
 
 const createPurchaseOrder = catchAsync(async (req, res) => {
-  const po = await purchaseOrderService.createPurchaseOrder(req.body, req.user.id);
+  const purchaseOrders = await purchaseOrderService.createPurchaseOrder(req.body, req.user.id);
   ApiResponse.created(res, {
-    message: 'Purchase order created successfully',
-    data: po,
+    message: purchaseOrders.length > 1
+      ? `${purchaseOrders.length} Purchase orders created successfully (obat & alkes dipisah)`
+      : 'Purchase order created successfully',
+    data: purchaseOrders,
   });
 });
 
@@ -50,22 +52,6 @@ const changeStatus = catchAsync(async (req, res) => {
   });
 });
 
-const approvePurchaseOrder = catchAsync(async (req, res) => {
-  const po = await purchaseOrderService.approvePurchaseOrder(req.params.id, req.body.notes, req.user.id);
-  ApiResponse.success(res, {
-    message: 'Purchase order approved successfully',
-    data: po,
-  });
-});
-
-const rejectPurchaseOrder = catchAsync(async (req, res) => {
-  const po = await purchaseOrderService.rejectPurchaseOrder(req.params.id, req.body.notes, req.user.id);
-  ApiResponse.success(res, {
-    message: 'Purchase order rejected',
-    data: po,
-  });
-});
-
 module.exports = {
   getPurchaseOrders,
   getStats,
@@ -74,6 +60,4 @@ module.exports = {
   updatePurchaseOrder,
   deletePurchaseOrder,
   changeStatus,
-  approvePurchaseOrder,
-  rejectPurchaseOrder,
 };

@@ -28,6 +28,16 @@ const createCustomer = [
     .trim()
     .isLength({ max: 200 })
     .withMessage('Contact person must be max 200 characters'),
+  body('ownerName')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Owner name must be max 200 characters'),
+  body('ownerAddress')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Owner address must be max 500 characters'),
   body('phone')
     .optional()
     .trim()
@@ -35,17 +45,6 @@ const createCustomer = [
     .withMessage('Phone must be max 30 characters')
     .matches(/^[0-9+\-\s()]*$/)
     .withMessage('Phone must contain only numbers, +, -, spaces, and parentheses'),
-  body('email')
-    .optional({ values: 'falsy' })
-    .trim()
-    .isEmail()
-    .withMessage('Please provide a valid email')
-    .normalizeEmail(),
-  body('website')
-    .optional({ values: 'falsy' })
-    .trim()
-    .isURL()
-    .withMessage('Please provide a valid URL'),
   body('address.street')
     .optional()
     .trim()
@@ -61,35 +60,34 @@ const createCustomer = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Province must be max 100 characters'),
-  body('address.postalCode')
-    .optional()
-    .trim()
-    .isLength({ max: 10 })
-    .withMessage('Postal code must be max 10 characters'),
-  body('address.country')
+  body('izinSarana.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Country must be max 100 characters'),
-  body('siaLicense.number')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('SIA license number must be max 100 characters'),
-  body('siaLicense.expiryDate')
+    .withMessage('Izin Sarana number must be max 100 characters'),
+  body('izinSarana.expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('SIA license expiry date must be a valid date'),
-  body('pharmacist.name')
+    .withMessage('Izin Sarana expiry date must be a valid date'),
+  body('apoteker.name')
     .optional()
     .trim()
     .isLength({ max: 200 })
-    .withMessage('Pharmacist name must be max 200 characters'),
-  body('pharmacist.sipaNumber')
+    .withMessage('Apoteker name must be max 200 characters'),
+  body('apoteker.address')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Apoteker address must be max 500 characters'),
+  body('sipa.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
     .withMessage('SIPA number must be max 100 characters'),
+  body('sipa.expiryDate')
+    .optional()
+    .isISO8601()
+    .withMessage('SIPA expiry date must be a valid date'),
   body('paymentTermDays')
     .optional()
     .isInt({ min: 0, max: 365 })
@@ -113,11 +111,21 @@ const createCustomer = [
     .trim()
     .isLength({ max: 200 })
     .withMessage('Account name must be max 200 characters'),
-  body('npwp')
+  body('npwp.number')
     .optional()
     .trim()
     .isLength({ max: 30 })
-    .withMessage('NPWP must be max 30 characters'),
+    .withMessage('NPWP number must be max 30 characters'),
+  body('npwp.name')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('NPWP name must be max 200 characters'),
+  body('npwp.address')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('NPWP address must be max 500 characters'),
   body('notes')
     .optional()
     .trim()
@@ -148,6 +156,16 @@ const updateCustomer = [
     .trim()
     .isLength({ max: 200 })
     .withMessage('Contact person must be max 200 characters'),
+  body('ownerName')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Owner name must be max 200 characters'),
+  body('ownerAddress')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Owner address must be max 500 characters'),
   body('phone')
     .optional()
     .trim()
@@ -155,17 +173,6 @@ const updateCustomer = [
     .withMessage('Phone must be max 30 characters')
     .matches(/^[0-9+\-\s()]*$/)
     .withMessage('Phone must contain only numbers, +, -, spaces, and parentheses'),
-  body('email')
-    .optional()
-    .trim()
-    .isEmail()
-    .withMessage('Please provide a valid email')
-    .normalizeEmail(),
-  body('website')
-    .optional()
-    .trim()
-    .isURL()
-    .withMessage('Please provide a valid URL'),
   body('address.street')
     .optional()
     .trim()
@@ -181,35 +188,34 @@ const updateCustomer = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Province must be max 100 characters'),
-  body('address.postalCode')
-    .optional()
-    .trim()
-    .isLength({ max: 10 })
-    .withMessage('Postal code must be max 10 characters'),
-  body('address.country')
+  body('izinSarana.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Country must be max 100 characters'),
-  body('siaLicense.number')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('SIA license number must be max 100 characters'),
-  body('siaLicense.expiryDate')
+    .withMessage('Izin Sarana number must be max 100 characters'),
+  body('izinSarana.expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('SIA license expiry date must be a valid date'),
-  body('pharmacist.name')
+    .withMessage('Izin Sarana expiry date must be a valid date'),
+  body('apoteker.name')
     .optional()
     .trim()
     .isLength({ max: 200 })
-    .withMessage('Pharmacist name must be max 200 characters'),
-  body('pharmacist.sipaNumber')
+    .withMessage('Apoteker name must be max 200 characters'),
+  body('apoteker.address')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Apoteker address must be max 500 characters'),
+  body('sipa.number')
     .optional()
     .trim()
     .isLength({ max: 100 })
     .withMessage('SIPA number must be max 100 characters'),
+  body('sipa.expiryDate')
+    .optional()
+    .isISO8601()
+    .withMessage('SIPA expiry date must be a valid date'),
   body('paymentTermDays')
     .optional()
     .isInt({ min: 0, max: 365 })
@@ -233,11 +239,21 @@ const updateCustomer = [
     .trim()
     .isLength({ max: 200 })
     .withMessage('Account name must be max 200 characters'),
-  body('npwp')
+  body('npwp.number')
     .optional()
     .trim()
     .isLength({ max: 30 })
-    .withMessage('NPWP must be max 30 characters'),
+    .withMessage('NPWP number must be max 30 characters'),
+  body('npwp.name')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('NPWP name must be max 200 characters'),
+  body('npwp.address')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('NPWP address must be max 500 characters'),
   body('notes')
     .optional()
     .trim()

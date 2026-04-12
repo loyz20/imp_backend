@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 const {
   PRODUCT_CATEGORY,
-  GOLONGAN_OBAT,
+  ALL_GOLONGAN,
   BENTUK_SEDIAAN,
   SATUAN,
-  SUHU_PENYIMPANAN,
 } = require('../constants');
 
 const productSchema = new mongoose.Schema(
@@ -37,7 +36,7 @@ const productSchema = new mongoose.Schema(
     golongan: {
       type: String,
       required: [true, 'Golongan is required'],
-      enum: Object.values(GOLONGAN_OBAT),
+      enum: Object.values(ALL_GOLONGAN),
       index: true,
     },
 
@@ -59,22 +58,10 @@ const productSchema = new mongoose.Schema(
       enum: BENTUK_SEDIAAN,
       default: null,
     },
-    kekuatan: {
-      type: String,
-      trim: true,
-      maxlength: 100,
-      default: null,
-    },
     zatAktif: {
       type: String,
       trim: true,
       maxlength: 500,
-      default: null,
-    },
-    golonganTerapi: {
-      type: String,
-      trim: true,
-      maxlength: 200,
       default: null,
     },
 
@@ -97,26 +84,6 @@ const productSchema = new mongoose.Schema(
     },
 
     // ─── Harga ───
-    hna: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
-    het: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
-    hargaBeli: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
-    hargaJual: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
     ppn: {
       type: Boolean,
       default: true,
@@ -128,11 +95,6 @@ const productSchema = new mongoose.Schema(
       min: 0,
       default: 0,
     },
-    suhuPenyimpanan: {
-      type: String,
-      enum: Object.values(SUHU_PENYIMPANAN),
-      default: SUHU_PENYIMPANAN.RUANGAN,
-    },
 
     // ─── Produsen ───
     manufacturer: {
@@ -140,11 +102,6 @@ const productSchema = new mongoose.Schema(
       trim: true,
       maxlength: 200,
       default: null,
-    },
-    countryOfOrigin: {
-      type: String,
-      trim: true,
-      default: 'Indonesia',
     },
 
     // ─── Lainnya ───
@@ -190,7 +147,6 @@ productSchema.index({ name: 1 }, { unique: true, collation: { locale: 'en', stre
 productSchema.index({ barcode: 1 }, { sparse: true });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ manufacturer: 1 });
-productSchema.index({ suhuPenyimpanan: 1 });
 productSchema.index(
   { name: 'text', sku: 'text', nie: 'text', barcode: 'text', zatAktif: 'text' },
   { name: 'product_search' },
@@ -199,13 +155,11 @@ productSchema.index(
 // ─── Pre-save: Auto-generate SKU ───
 productSchema.pre('save', async function () {
   if (this.isNew && !this.sku) {
-    const now = new Date();
-    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const prefix = `PRD-${ymd}-`;
+    // F0001 for obat, A0001 for alat_kesehatan
+    const prefix = this.category === 'alat_kesehatan' ? 'A' : 'F';
 
-    // Find the highest existing SKU for today
     const lastProduct = await this.constructor
-      .findOne({ sku: { $regex: `^${prefix}` } })
+      .findOne({ sku: { $regex: `^${prefix}\\d+$` } })
       .sort({ sku: -1 })
       .select('sku')
       .lean();
@@ -213,7 +167,7 @@ productSchema.pre('save', async function () {
     let nextNum = 1;
     if (lastProduct) {
       const lastNum = parseInt(lastProduct.sku.replace(prefix, ''), 10);
-      nextNum = lastNum + 1;
+      if (Number.isFinite(lastNum)) nextNum = lastNum + 1;
     }
     this.sku = `${prefix}${String(nextNum).padStart(4, '0')}`;
   }

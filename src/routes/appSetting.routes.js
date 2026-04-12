@@ -24,6 +24,8 @@ router.put('/', c.updateAll);
 router.put('/company', validate(v.updateCompany), c.updateCompany);
 router.put('/licenses', validate(v.updateLicenses), c.updateLicenses);
 router.put('/pharmacist', validate(v.updatePharmacist), c.updatePharmacist);
+router.put('/pharmacist-obat', validate(v.updatePharmacistObat), c.updatePharmacistObat);
+router.put('/pharmacist-alkes', validate(v.updatePharmacistAlkes), c.updatePharmacistAlkes);
 router.put('/tax', validate(v.updateTax), c.updateTax);
 router.put('/invoice', validate(v.updateInvoice), c.updateInvoice);
 router.put('/purchase-order', validate(v.updatePurchaseOrder), c.updatePurchaseOrder);

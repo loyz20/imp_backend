@@ -12,10 +12,10 @@ const addressFields = (prefix) => [
 
 // ── License fields helper ──
 const licenseFields = (prefix) => [
-  body(`${prefix}.number`).optional().isString().trim(),
-  body(`${prefix}.issuedDate`).optional().isISO8601().toDate(),
-  body(`${prefix}.expiryDate`).optional().isISO8601().toDate(),
-  body(`${prefix}.document`).optional().isString().trim(),
+  body(`${prefix}.number`).optional({ values: 'falsy' }).isString().trim(),
+  body(`${prefix}.issuedDate`).optional({ values: 'falsy' }).isISO8601().toDate(),
+  body(`${prefix}.expiryDate`).optional({ values: 'falsy' }).isISO8601().toDate(),
+  body(`${prefix}.document`).optional({ values: 'falsy' }).isString().trim(),
 ];
 
 const updateCompany = [
@@ -32,19 +32,23 @@ const updateLicenses = [
   ...licenseFields('pbf'),
   ...licenseFields('siup'),
   ...licenseFields('tdp'),
-  body('nib.number').optional().isString().trim(),
+  body('nib.number').optional({ values: 'falsy' }).isString().trim(),
   ...licenseFields('cdob'),
 ];
 
-const updatePharmacist = [
-  body('name').optional().isString().trim().isLength({ max: 200 }),
-  body('sipaNumber').optional().isString().trim(),
-  body('straNumber').optional().isString().trim(),
-  body('sipaExpiry').optional().isISO8601().toDate(),
-  body('straExpiry').optional().isISO8601().toDate(),
-  body('phone').optional().isString().trim(),
-  body('email').optional().isEmail().normalizeEmail(),
+const pharmacistFields = [
+  body('name').optional({ values: 'falsy' }).isString().trim().isLength({ max: 200 }),
+  body('sipaNumber').optional({ values: 'falsy' }).isString().trim(),
+  body('straNumber').optional({ values: 'falsy' }).isString().trim(),
+  body('sipaExpiry').optional({ values: 'falsy' }).isISO8601().toDate(),
+  body('straExpiry').optional({ values: 'falsy' }).isISO8601().toDate(),
+  body('phone').optional({ values: 'falsy' }).isString().trim(),
+  body('email').optional({ values: 'falsy' }).isEmail().normalizeEmail(),
 ];
+
+const updatePharmacist = [...pharmacistFields];
+const updatePharmacistObat = [...pharmacistFields];
+const updatePharmacistAlkes = [...pharmacistFields];
 
 const updateTax = [
   body('npwp').optional().isString().trim(),
@@ -204,6 +208,8 @@ module.exports = {
   updateCompany,
   updateLicenses,
   updatePharmacist,
+  updatePharmacistObat,
+  updatePharmacistAlkes,
   updateTax,
   updateInvoice,
   updatePurchaseOrder,

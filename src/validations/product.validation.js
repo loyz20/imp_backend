@@ -1,10 +1,11 @@
 const { body, param, query } = require('express-validator');
 const {
   PRODUCT_CATEGORY,
+  ALL_GOLONGAN,
   GOLONGAN_OBAT,
+  GOLONGAN_ALKES,
   BENTUK_SEDIAAN,
   SATUAN,
-  SUHU_PENYIMPANAN,
 } = require('../constants');
 
 const productIdParam = [
@@ -32,7 +33,7 @@ const getProducts = [
     .withMessage('Invalid category'),
   query('golongan')
     .optional()
-    .isIn(Object.values(GOLONGAN_OBAT))
+    .isIn(Object.values(ALL_GOLONGAN))
     .withMessage('Invalid golongan'),
   query('isActive')
     .optional()
@@ -44,16 +45,11 @@ const getProducts = [
     .trim()
     .isLength({ max: 200 })
     .withMessage('Manufacturer query too long'),
-  query('suhuPenyimpanan')
-    .optional()
-    .isIn(Object.values(SUHU_PENYIMPANAN))
-    .withMessage('Invalid suhu penyimpanan'),
   query('sort')
     .optional()
     .isIn([
       'name', '-name', 'sku', '-sku', 'createdAt', '-createdAt',
-      'hna', '-hna', 'hargaJual', '-hargaJual', 'category', '-category',
-      'golongan', '-golongan',
+      'category', '-category', 'golongan', '-golongan',
     ])
     .withMessage('Invalid sort field'),
 ];
@@ -83,8 +79,18 @@ const createProduct = [
   body('golongan')
     .notEmpty()
     .withMessage('Golongan is required')
-    .isIn(Object.values(GOLONGAN_OBAT))
-    .withMessage('Invalid golongan'),
+    .isIn(Object.values(ALL_GOLONGAN))
+    .withMessage('Invalid golongan')
+    .custom((value, { req }) => {
+      const cat = req.body.category;
+      if (cat === 'obat' && !Object.values(GOLONGAN_OBAT).includes(value)) {
+        throw new Error('Golongan tidak sesuai untuk kategori Obat');
+      }
+      if (cat === 'alat_kesehatan' && !Object.values(GOLONGAN_ALKES).includes(value)) {
+        throw new Error('Golongan tidak sesuai untuk kategori Alat Kesehatan');
+      }
+      return true;
+    }),
   body('nie')
     .optional({ values: 'null' })
     .trim()
@@ -99,21 +105,11 @@ const createProduct = [
     .optional({ values: 'null' })
     .isIn(BENTUK_SEDIAAN)
     .withMessage('Invalid bentuk sediaan'),
-  body('kekuatan')
-    .optional({ values: 'null' })
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Kekuatan must be at most 100 characters'),
   body('zatAktif')
     .optional({ values: 'null' })
     .trim()
     .isLength({ max: 500 })
     .withMessage('Zat aktif must be at most 500 characters'),
-  body('golonganTerapi')
-    .optional({ values: 'null' })
-    .trim()
-    .isLength({ max: 200 })
-    .withMessage('Golongan terapi must be at most 200 characters'),
   body('satuan')
     .optional()
     .isIn(SATUAN)
@@ -127,22 +123,6 @@ const createProduct = [
     .optional({ values: 'null' })
     .isInt({ min: 1 })
     .withMessage('Isi per satuan must be at least 1'),
-  body('hna')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('HNA must be a non-negative number'),
-  body('het')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('HET must be a non-negative number'),
-  body('hargaBeli')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Harga beli must be a non-negative number'),
-  body('hargaJual')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Harga jual must be a non-negative number'),
   body('ppn')
     .optional()
     .isBoolean()
@@ -151,20 +131,11 @@ const createProduct = [
     .optional()
     .isInt({ min: 0 })
     .withMessage('Stok minimum must be a non-negative integer'),
-  body('suhuPenyimpanan')
-    .optional()
-    .isIn(Object.values(SUHU_PENYIMPANAN))
-    .withMessage('Invalid suhu penyimpanan'),
   body('manufacturer')
     .optional({ values: 'null' })
     .trim()
     .isLength({ max: 200 })
     .withMessage('Manufacturer must be at most 200 characters'),
-  body('countryOfOrigin')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Country of origin must be at most 100 characters'),
   body('keterangan')
     .optional({ values: 'null' })
     .trim()
@@ -201,8 +172,18 @@ const updateProduct = [
     .withMessage('Invalid category'),
   body('golongan')
     .optional()
-    .isIn(Object.values(GOLONGAN_OBAT))
-    .withMessage('Invalid golongan'),
+    .isIn(Object.values(ALL_GOLONGAN))
+    .withMessage('Invalid golongan')
+    .custom((value, { req }) => {
+      const cat = req.body.category;
+      if (cat === 'obat' && !Object.values(GOLONGAN_OBAT).includes(value)) {
+        throw new Error('Golongan tidak sesuai untuk kategori Obat');
+      }
+      if (cat === 'alat_kesehatan' && !Object.values(GOLONGAN_ALKES).includes(value)) {
+        throw new Error('Golongan tidak sesuai untuk kategori Alat Kesehatan');
+      }
+      return true;
+    }),
   body('nie')
     .optional({ values: 'null' })
     .trim()
@@ -217,21 +198,11 @@ const updateProduct = [
     .optional({ values: 'null' })
     .isIn(BENTUK_SEDIAAN)
     .withMessage('Invalid bentuk sediaan'),
-  body('kekuatan')
-    .optional({ values: 'null' })
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Kekuatan must be at most 100 characters'),
   body('zatAktif')
     .optional({ values: 'null' })
     .trim()
     .isLength({ max: 500 })
     .withMessage('Zat aktif must be at most 500 characters'),
-  body('golonganTerapi')
-    .optional({ values: 'null' })
-    .trim()
-    .isLength({ max: 200 })
-    .withMessage('Golongan terapi must be at most 200 characters'),
   body('satuan')
     .optional()
     .isIn(SATUAN)
@@ -245,22 +216,6 @@ const updateProduct = [
     .optional({ values: 'null' })
     .isInt({ min: 1 })
     .withMessage('Isi per satuan must be at least 1'),
-  body('hna')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('HNA must be a non-negative number'),
-  body('het')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('HET must be a non-negative number'),
-  body('hargaBeli')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Harga beli must be a non-negative number'),
-  body('hargaJual')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Harga jual must be a non-negative number'),
   body('ppn')
     .optional()
     .isBoolean()
@@ -269,20 +224,11 @@ const updateProduct = [
     .optional()
     .isInt({ min: 0 })
     .withMessage('Stok minimum must be a non-negative integer'),
-  body('suhuPenyimpanan')
-    .optional()
-    .isIn(Object.values(SUHU_PENYIMPANAN))
-    .withMessage('Invalid suhu penyimpanan'),
   body('manufacturer')
     .optional({ values: 'null' })
     .trim()
     .isLength({ max: 200 })
     .withMessage('Manufacturer must be at most 200 characters'),
-  body('countryOfOrigin')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Country of origin must be at most 100 characters'),
   body('keterangan')
     .optional({ values: 'null' })
     .trim()

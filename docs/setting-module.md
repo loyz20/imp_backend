@@ -36,7 +36,9 @@
 | PUT | `/settings` | Update seluruh settings |
 | PUT | `/settings/company` | Update data perusahaan |
 | PUT | `/settings/licenses` | Update lisensi |
-| PUT | `/settings/pharmacist` | Update apoteker penanggung jawab |
+| PUT | `/settings/pharmacist` | Update apoteker penanggung jawab (legacy) |
+| PUT | `/settings/pharmacist-obat` | Update apoteker PJ obat |
+| PUT | `/settings/pharmacist-alkes` | Update apoteker PJ alkes |
 | PUT | `/settings/tax` | Update pajak |
 | PUT | `/settings/invoice` | Update konfigurasi invoice |
 | PUT | `/settings/purchase-order` | Update konfigurasi PO |
@@ -54,7 +56,7 @@
 | PUT | `/settings/doc-number/:type/reset` | Reset counter (SA only) |
 | POST | `/settings/test-smtp` | Test koneksi SMTP |
 
-**Total: 24 endpoints**
+**Total: 26 endpoints**
 
 ---
 
@@ -102,7 +104,7 @@ Mengembalikan daftar lisensi yang akan atau sudah expired (threshold: 30 hari).
 }
 ```
 
-**License yang dicek:** PBF, SIUP, TDP, CDOB, SIPA (Apoteker), STRA (Apoteker)
+**License yang dicek:** PBF, SIUP, TDP, CDOB, SIPA (Apoteker), STRA (Apoteker), SIPA (Obat), STRA (Obat), SIPA (Alkes), STRA (Alkes)
 
 ---
 
@@ -180,15 +182,57 @@ PUT /settings/licenses
 
 ---
 
-### 4.3 Update Pharmacist
+### 4.3 Update Pharmacist (Legacy)
 
 ```
 PUT /settings/pharmacist
 ```
 
+> Field `responsiblePharmacist` lama. Tetap tersedia untuk backward compatibility.
+
 | Field | Type | Deskripsi |
 |-------|------|-----------|
 | `name` | `string` | Nama apoteker PJ |
+| `sipaNumber` | `string` | Nomor SIPA |
+| `straNumber` | `string` | Nomor STRA |
+| `sipaExpiry` | `date` | Masa berlaku SIPA |
+| `straExpiry` | `date` | Masa berlaku STRA |
+| `phone` | `string` | |
+| `email` | `string` | |
+
+---
+
+### 4.3a Update Pharmacist Obat
+
+```
+PUT /settings/pharmacist-obat
+```
+
+Apoteker penanggung jawab khusus **obat**.
+
+| Field | Type | Deskripsi |
+|-------|------|-----------|
+| `name` | `string` | Nama apoteker PJ obat |
+| `sipaNumber` | `string` | Nomor SIPA |
+| `straNumber` | `string` | Nomor STRA |
+| `sipaExpiry` | `date` | Masa berlaku SIPA |
+| `straExpiry` | `date` | Masa berlaku STRA |
+| `phone` | `string` | |
+| `email` | `string` | |
+
+---
+
+### 4.3b Update Pharmacist Alkes
+
+```
+PUT /settings/pharmacist-alkes
+```
+
+Apoteker penanggung jawab khusus **alat kesehatan**.
+
+| Field | Type | Deskripsi |
+|-------|------|-----------|
+| `name` | `string` | Nama apoteker PJ alkes |
 | `sipaNumber` | `string` | Nomor SIPA |
 | `straNumber` | `string` | Nomor STRA |
 | `sipaExpiry` | `date` | Masa berlaku SIPA |
@@ -494,7 +538,7 @@ Sections yang valid untuk `GET /settings/:section`:
 
 | Section | Deskripsi |
 |---------|-----------|
-| `company` | Data perusahaan + lisensi + apoteker + pajak |
+| `company` | Data perusahaan + lisensi + apoteker (legacy, obat, alkes) + pajak |
 | `invoice` | Konfigurasi invoice |
 | `purchaseOrder` | Konfigurasi PO |
 | `deliveryOrder` | Konfigurasi surat jalan |

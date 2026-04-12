@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const config = require('../config');
+const MySQLAuthService = require('./auth.service.mysql');
 
 // ─── Token Generation ───
 
@@ -16,9 +17,9 @@ const generateTokens = (userId, role) => {
   return { accessToken, refreshToken };
 };
 
-// ─── Register ───
+// ─── Mongo Implementations ───
 
-const register = async ({ name, email, password }) => {
+const mongoRegister = async ({ name, email, password }) => {
   const existingUser = await User.findByEmail(email);
   if (existingUser) {
     throw ApiError.conflict('Email already registered');
@@ -27,21 +28,14 @@ const register = async ({ name, email, password }) => {
   const user = await User.create({ name, email, password });
   const tokens = generateTokens(user._id, user.role);
 
-  // Store refresh token
   user.refreshToken = tokens.refreshToken;
   const emailVerificationToken = user.createEmailVerificationToken();
   await user.save({ validateBeforeSave: false });
 
-  return {
-    user,
-    tokens,
-    emailVerificationToken,
-  };
+  return { user, tokens, emailVerificationToken };
 };
 
-// ─── Login ───
-
-const login = async ({ email, password, ip }) => {
+const mongoLogin = async ({ email, password, ip }) => {
   const user = await User.findOne({ email }).select(
     '+password +loginAttempts +lockUntil +refreshToken',
   );
@@ -50,32 +44,25 @@ const login = async ({ email, password, ip }) => {
     throw ApiError.unauthorized('Invalid email or password');
   }
 
-  // Check if account is locked
   if (user.isLocked) {
     throw ApiError.forbidden(
       'Account is temporarily locked due to too many failed login attempts. Please try again later.',
     );
   }
 
-  // Check if account is active
   if (!user.isActive) {
     throw ApiError.forbidden('Your account has been deactivated. Please contact support.');
   }
 
-  // Verify password
   const isPasswordValid = await user.comparePassword(password);
   if (!isPasswordValid) {
     await user.incrementLoginAttempts();
     throw ApiError.unauthorized('Invalid email or password');
   }
 
-  // Reset login attempts on successful login
   await user.resetLoginAttempts();
-
-  // Generate tokens
   const tokens = generateTokens(user._id, user.role);
 
-  // Update login tracking
   user.refreshToken = tokens.refreshToken;
   user.lastLoginAt = new Date();
   user.lastLoginIp = ip;
@@ -84,17 +71,13 @@ const login = async ({ email, password, ip }) => {
   return { user, tokens };
 };
 
-// ─── Logout ───
-
-const logout = async (userId) => {
+const mongoLogout = async (userId) => {
   await User.findByIdAndUpdate(userId, {
     $unset: { refreshToken: 1 },
   });
 };
 
-// ─── Refresh Token ───
-
-const refreshToken = async (token) => {
+const mongoRefreshToken = async (token) => {
   let decoded;
   try {
     decoded = jwt.verify(token, config.jwt.refreshSecret);
@@ -107,26 +90,20 @@ const refreshToken = async (token) => {
     throw ApiError.unauthorized('User not found');
   }
 
-  // Verify that the refresh token matches stored token (token rotation)
   if (user.refreshToken !== token) {
-    // Possible token reuse attack — clear all tokens
     user.refreshToken = undefined;
     await user.save({ validateBeforeSave: false });
     throw ApiError.unauthorized('Token reuse detected. Please login again.');
   }
 
   const tokens = generateTokens(user._id, user.role);
-
-  // Rotate refresh token
   user.refreshToken = tokens.refreshToken;
   await user.save({ validateBeforeSave: false });
 
   return tokens;
 };
 
-// ─── Get Me ───
-
-const getMe = async (userId) => {
+const mongoGetMe = async (userId) => {
   const user = await User.findById(userId);
   if (!user) {
     throw ApiError.notFound('User not found');
@@ -134,9 +111,7 @@ const getMe = async (userId) => {
   return user;
 };
 
-// ─── Update Profile ───
-
-const updateProfile = async (userId, updateData) => {
+const mongoUpdateProfile = async (userId, updateData) => {
   const allowedFields = ['name', 'phone', 'address'];
   const filteredData = {};
 
@@ -158,9 +133,7 @@ const updateProfile = async (userId, updateData) => {
   return user;
 };
 
-// ─── Change Password ───
-
-const changePassword = async (userId, { currentPassword, newPassword }) => {
+const mongoChangePassword = async (userId, { currentPassword, newPassword }) => {
   const user = await User.findById(userId).select('+password');
   if (!user) {
     throw ApiError.notFound('User not found');
@@ -172,7 +145,7 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
   }
 
   user.password = newPassword;
-  user.refreshToken = undefined; // Invalidate all sessions
+  user.refreshToken = undefined;
   await user.save();
 
   const tokens = generateTokens(user._id, user.role);
@@ -182,25 +155,19 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
   return tokens;
 };
 
-// ─── Forgot Password ───
-
-const forgotPassword = async (email) => {
+const mongoForgotPassword = async (email) => {
   const user = await User.findByEmail(email);
   if (!user) {
-    // Don't reveal whether user exists
     return null;
   }
 
   const resetToken = user.createPasswordResetToken();
   await user.save({ validateBeforeSave: false });
 
-  // Return the plain token — controller/caller is responsible for sending email
   return { resetToken, user };
 };
 
-// ─── Reset Password ───
-
-const resetPassword = async (token, newPassword) => {
+const mongoResetPassword = async (token, newPassword) => {
   const hashedToken = crypto
     .createHash('sha256')
     .update(token)
@@ -218,15 +185,13 @@ const resetPassword = async (token, newPassword) => {
   user.password = newPassword;
   user.passwordResetToken = undefined;
   user.passwordResetExpires = undefined;
-  user.refreshToken = undefined; // Invalidate all sessions
+  user.refreshToken = undefined;
   await user.save();
 
   return user;
 };
 
-// ─── Verify Email ───
-
-const verifyEmail = async (token) => {
+const mongoVerifyEmail = async (token) => {
   const hashedToken = crypto
     .createHash('sha256')
     .update(token)
@@ -249,9 +214,7 @@ const verifyEmail = async (token) => {
   return user;
 };
 
-// ─── Resend Email Verification ───
-
-const resendEmailVerification = async (userId) => {
+const mongoResendEmailVerification = async (userId) => {
   const user = await User.findById(userId);
   if (!user) {
     throw ApiError.notFound('User not found');
@@ -265,6 +228,85 @@ const resendEmailVerification = async (userId) => {
   await user.save({ validateBeforeSave: false });
 
   return { emailVerificationToken, user };
+};
+
+// ─── Exported Functions with Provider Branching ───
+
+const register = async (data) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.register(data);
+  }
+  return mongoRegister(data);
+};
+
+const login = async (data) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.login(data);
+  }
+  return mongoLogin(data);
+};
+
+const logout = async (userId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.logout(userId);
+  }
+  return mongoLogout(userId);
+};
+
+const refreshToken = async (token) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.refreshToken(token);
+  }
+  return mongoRefreshToken(token);
+};
+
+const getMe = async (userId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.getMe(userId);
+  }
+  return mongoGetMe(userId);
+};
+
+const updateProfile = async (userId, updateData) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.updateProfile(userId, updateData);
+  }
+  return mongoUpdateProfile(userId, updateData);
+};
+
+const changePassword = async (userId, data) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.changePassword(userId, data);
+  }
+  return mongoChangePassword(userId, data);
+};
+
+const forgotPassword = async (email) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.forgotPassword(email);
+  }
+  return mongoForgotPassword(email);
+};
+
+const resetPassword = async (token, newPassword) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.resetPassword(token, newPassword);
+  }
+  return mongoResetPassword(token, newPassword);
+};
+
+const verifyEmail = async (token) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.verifyEmail(token);
+  }
+  return mongoVerifyEmail(token);
+};
+
+const resendEmailVerification = async (userId) => {
+  if (config.dbProvider === 'mysql') {
+    return MySQLAuthService.resendEmailVerification(userId);
+  }
+  return mongoResendEmailVerification(userId);
 };
 
 module.exports = {

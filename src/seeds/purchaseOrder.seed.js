@@ -38,7 +38,6 @@ const seedPurchaseOrders = async () => {
         paymentTermDays: 30,
         status: PO_STATUS.SENT,
         sentAt: new Date('2026-04-01T14:00:00Z'),
-        approvedAt: new Date('2026-04-01T12:00:00Z'),
         notes: 'Kebutuhan stok rutin bulan April 2026',
         items: [
           { productId: products[0]._id, satuan: 'Box', quantity: 100, unitPrice: 85000, discount: 5 },
@@ -50,7 +49,8 @@ const seedPurchaseOrders = async () => {
         orderDate: new Date('2026-04-02'),
         expectedDeliveryDate: new Date('2026-04-10'),
         paymentTermDays: 45,
-        status: PO_STATUS.PENDING_APPROVAL,
+        status: PO_STATUS.SENT,
+        sentAt: new Date('2026-04-02T10:00:00Z'),
         notes: 'Pengadaan produk baru Q2 2026',
         items: [
           { productId: products[2]._id, satuan: 'Box', quantity: 50, unitPrice: 125000, discount: 10 },

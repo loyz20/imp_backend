@@ -52,12 +52,17 @@ const soItemSchema = new mongoose.Schema({
 
 const salesOrderSchema = new mongoose.Schema(
   {
-    // ── Identitas SO ──
-    invoiceNumber: {
+    // ── Identitas Surat Jalan ──
+    suratJalanNumber: {
       type: String,
-      required: [true, 'Invoice number is required'],
       unique: true,
       trim: true,
+    },
+    soCategory: {
+      type: String,
+      enum: ['obat', 'alkes'],
+      default: null,
+      index: true,
     },
     status: {
       type: String,
@@ -83,13 +88,9 @@ const salesOrderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    packedAt: { type: Date, default: null },
-    deliveredAt: { type: Date, default: null },
-    returnedAt: { type: Date, default: null },
-    confirmedAt: { type: Date, default: null },
-    processedAt: { type: Date, default: null },
     shippedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
+    returnedAt: { type: Date, default: null },
 
     // ── Pengiriman ──
     shippingAddress: {
@@ -152,7 +153,7 @@ const salesOrderSchema = new mongoose.Schema(
 salesOrderSchema.index({ createdAt: -1 });
 salesOrderSchema.index({ orderDate: -1 });
 salesOrderSchema.index(
-  { invoiceNumber: 'text' },
+  { suratJalanNumber: 'text' },
   { name: 'so_search' },
 );
 
@@ -168,8 +169,33 @@ salesOrderSchema.methods.calculateTotals = function (ppnRate = 0) {
   this.totalAmount = this.subtotal + this.ppnAmount;
 };
 
-// ─── Calculate totals ───
+const ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+
+// ─── Pre-save: auto-generate surat jalan number & calculate totals ───
 salesOrderSchema.pre('save', async function () {
+  // Auto-generate surat jalan number: NNNN/F|A/SJ/ROMAN_MONTH/IMP/YEAR
+  if (this.isNew && !this.suratJalanNumber && this.soCategory) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const romanMonth = ROMAN_MONTHS[now.getMonth()];
+    const typeCode = this.soCategory === 'alkes' ? 'A' : 'F';
+    const suffix = `/${typeCode}/SJ/${romanMonth}/IMP/${year}`;
+
+    const escapedSuffix = suffix.replace(/\//g, '\\/');
+    const last = await this.constructor
+      .findOne({ suratJalanNumber: { $regex: `^\\d{4}${escapedSuffix}$` } })
+      .sort({ suratJalanNumber: -1 })
+      .select('suratJalanNumber')
+      .lean();
+
+    let nextNum = 1;
+    if (last) {
+      const lastNum = parseInt(last.suratJalanNumber.split('/')[0], 10);
+      if (!isNaN(lastNum)) nextNum = lastNum + 1;
+    }
+    this.suratJalanNumber = `${String(nextNum).padStart(4, '0')}${suffix}`;
+  }
+
   this.calculateTotals();
 });
 

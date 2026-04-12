@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const { INVOICE_STATUS, SATUAN } = require('../constants');
 
+const ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+
 const invoiceItemSchema = new mongoose.Schema({
   productId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -58,6 +60,12 @@ const invoiceSchema = new mongoose.Schema(
       default: 'sales',
       index: true,
     },
+    invoiceCategory: {
+      type: String,
+      enum: ['obat', 'alkes'],
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: Object.values(INVOICE_STATUS),
@@ -65,12 +73,11 @@ const invoiceSchema = new mongoose.Schema(
       index: true,
     },
 
-    // ── Referensi Penjualan (SO) ──
-    salesOrderId: {
+    // ── Referensi Penjualan (SO / Surat Jalan) ──
+    salesOrderIds: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'SalesOrder',
-      index: true,
-    },
+    }],
 
     // ── Referensi Pembelian (PO & GR) ──
     purchaseOrderId: {
@@ -176,22 +183,45 @@ invoiceSchema.index(
 invoiceSchema.pre('save', async function () {
   if (this.isNew && !this.invoiceNumber) {
     const now = new Date();
-    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const tag = this.invoiceType === 'purchase' ? 'PINV' : 'INV';
-    const prefix = `${tag}-${ymd}-`;
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+    const romanMonth = ROMAN_MONTHS[month];
 
-    const last = await this.constructor
-      .findOne({ invoiceNumber: { $regex: `^${prefix}` } })
-      .sort({ invoiceNumber: -1 })
-      .select('invoiceNumber')
-      .lean();
+    if (this.invoiceType === 'sales' && this.invoiceCategory) {
+      // Sales invoice: NNNN/F/IMP/IV/2026 or NNNN/A/IMP/IV/2026
+      const typeCode = this.invoiceCategory === 'obat' ? 'F' : 'A';
+      const suffix = `/${typeCode}/IMP/${romanMonth}/${year}`;
 
-    let nextNum = 1;
-    if (last) {
-      const lastNum = parseInt(last.invoiceNumber.replace(prefix, ''), 10);
-      nextNum = lastNum + 1;
+      // Find last invoice with same suffix pattern for this month
+      const escapedSuffix = suffix.replace(/\//g, '\\/');
+      const last = await this.constructor
+        .findOne({ invoiceNumber: { $regex: `^\\d{4}${escapedSuffix}$` } })
+        .sort({ invoiceNumber: -1 })
+        .select('invoiceNumber')
+        .lean();
+
+      let nextNum = 1;
+      if (last) {
+        const lastNum = parseInt(last.invoiceNumber.split('/')[0], 10);
+        if (!isNaN(lastNum)) nextNum = lastNum + 1;
+      }
+      this.invoiceNumber = `${String(nextNum).padStart(4, '0')}${suffix}`;
+    } else if (this.invoiceType === 'purchase') {
+      // Purchase invoice: keep manual number (set by GR invoiceNumber)
+      // If somehow not set, fallback
+      const prefix = `PINV-${year}${String(month + 1).padStart(2, '0')}-`;
+      const last = await this.constructor
+        .findOne({ invoiceNumber: { $regex: `^${prefix}` } })
+        .sort({ invoiceNumber: -1 })
+        .select('invoiceNumber')
+        .lean();
+      let nextNum = 1;
+      if (last) {
+        const lastNum = parseInt(last.invoiceNumber.replace(prefix, ''), 10);
+        nextNum = lastNum + 1;
+      }
+      this.invoiceNumber = `${prefix}${String(nextNum).padStart(4, '0')}`;
     }
-    this.invoiceNumber = `${prefix}${String(nextNum).padStart(4, '0')}`;
   }
 });
 

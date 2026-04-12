@@ -6,13 +6,11 @@ const addressSchema = new mongoose.Schema(
     street: { type: String, trim: true, maxlength: 500, default: null },
     city: { type: String, trim: true, maxlength: 100, default: null },
     province: { type: String, trim: true, maxlength: 100, default: null },
-    postalCode: { type: String, trim: true, maxlength: 10, default: null },
-    country: { type: String, trim: true, default: 'Indonesia' },
   },
   { _id: false },
 );
 
-const siaLicenseSchema = new mongoose.Schema(
+const licenseSchema = new mongoose.Schema(
   {
     number: { type: String, trim: true, maxlength: 100, default: null },
     expiryDate: { type: Date, default: null },
@@ -20,10 +18,19 @@ const siaLicenseSchema = new mongoose.Schema(
   { _id: false },
 );
 
-const pharmacistSchema = new mongoose.Schema(
+const apotekerSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true, maxlength: 200, default: null },
-    sipaNumber: { type: String, trim: true, maxlength: 100, default: null },
+    address: { type: String, trim: true, maxlength: 500, default: null },
+  },
+  { _id: false },
+);
+
+const npwpSchema = new mongoose.Schema(
+  {
+    number: { type: String, trim: true, maxlength: 30, default: null },
+    name: { type: String, trim: true, maxlength: 200, default: null },
+    address: { type: String, trim: true, maxlength: 500, default: null },
   },
   { _id: false },
 );
@@ -59,6 +66,20 @@ const customerSchema = new mongoose.Schema(
       index: true,
     },
 
+    // ── Pemilik ──
+    ownerName: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      default: null,
+    },
+    ownerAddress: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: null,
+    },
+
     // ── Kontak ──
     contactPerson: {
       type: String,
@@ -72,17 +93,6 @@ const customerSchema = new mongoose.Schema(
       maxlength: 30,
       default: null,
     },
-    email: {
-      type: String,
-      trim: true,
-      lowercase: true,
-      default: null,
-    },
-    website: {
-      type: String,
-      trim: true,
-      default: null,
-    },
 
     // ── Alamat ──
     address: {
@@ -91,14 +101,20 @@ const customerSchema = new mongoose.Schema(
     },
 
     // ── Perizinan ──
-    siaLicense: {
-      type: siaLicenseSchema,
+    izinSarana: {
+      type: licenseSchema,
       default: () => ({}),
     },
 
     // ── Apoteker Penanggung Jawab ──
-    pharmacist: {
-      type: pharmacistSchema,
+    apoteker: {
+      type: apotekerSchema,
+      default: () => ({}),
+    },
+
+    // ── SIPA ──
+    sipa: {
+      type: licenseSchema,
       default: () => ({}),
     },
 
@@ -120,11 +136,10 @@ const customerSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
-    // ── Lainnya ──
+    // ── NPWP ──
     npwp: {
-      type: String,
-      trim: true,
-      default: null,
+      type: npwpSchema,
+      default: () => ({}),
     },
     notes: {
       type: String,
@@ -167,31 +182,27 @@ const customerSchema = new mongoose.Schema(
 customerSchema.index({ name: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
 customerSchema.index({ createdAt: -1 });
 customerSchema.index({ 'address.city': 1 });
-customerSchema.index({ 'siaLicense.expiryDate': 1 });
+customerSchema.index({ 'izinSarana.expiryDate': 1 });
 customerSchema.index(
-  { name: 'text', code: 'text', contactPerson: 'text', email: 'text', phone: 'text' },
+  { name: 'text', code: 'text', contactPerson: 'text', phone: 'text' },
   { name: 'customer_search' },
 );
 
 // ─── Pre-save: Auto-generate Code ───
 customerSchema.pre('save', async function () {
   if (this.isNew && !this.code) {
-    const now = new Date();
-    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const prefix = `CUS-${ymd}-`;
-
     const lastCustomer = await this.constructor
-      .findOne({ code: { $regex: `^${prefix}` } })
+      .findOne({ code: { $regex: /^C\d+$/ } })
       .sort({ code: -1 })
       .select('code')
       .lean();
 
     let nextNum = 1;
     if (lastCustomer) {
-      const lastNum = parseInt(lastCustomer.code.replace(prefix, ''), 10);
+      const lastNum = parseInt(lastCustomer.code.slice(1), 10);
       nextNum = lastNum + 1;
     }
-    this.code = `${prefix}${String(nextNum).padStart(4, '0')}`;
+    this.code = `C${String(nextNum).padStart(4, '0')}`;
   }
 });
 

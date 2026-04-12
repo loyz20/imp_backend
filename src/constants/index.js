@@ -61,25 +61,33 @@ const UPLOAD = {
 
 const PRODUCT_CATEGORY = {
   OBAT: 'obat',
-  ALKES: 'alkes',
-  BHP: 'bhp',
+  ALKES: 'alat_kesehatan',
+};
+
+const GOLONGAN_OBAT = {
+  PREKURSOR: 'prekursor',
+  OBAT_TERTENTU: 'obat_tertentu',
+  OBAT_KERAS: 'obat_keras',
+  OBAT_BEBAS_TERBATAS: 'obat_bebas_terbatas',
+  OBAT_BEBAS: 'obat_bebas',
   SUPLEMEN: 'suplemen',
-  KOSMETIK: 'kosmetik',
   OBAT_TRADISIONAL: 'obat_tradisional',
   LAINNYA: 'lainnya',
 };
 
-const GOLONGAN_OBAT = {
-  NARKOTIKA: 'narkotika',
-  PSIKOTROPIKA: 'psikotropika',
-  OBAT_KERAS: 'obat_keras',
-  OBAT_KERAS_TERBATAS: 'obat_keras_terbatas',
-  OBAT_BEBAS_TERBATAS: 'obat_bebas_terbatas',
-  OBAT_BEBAS: 'obat_bebas',
-  FITOFARMAKA: 'fitofarmaka',
-  OHT: 'oht',
-  JAMU: 'jamu',
-  NON_OBAT: 'non_obat',
+const GOLONGAN_ALKES = {
+  ELEKTROMEDIK_NON_RADIASI: 'elektromedik_non_radiasi',
+  NON_ELEKTROMEDIK_NON_STERIL: 'non_elektromedik_non_steril',
+  NON_ELEKTROMEDIK_STERIL: 'non_elektromedik_steril',
+  DIAGNOSTIK_INVITRO: 'diagnostik_invitro',
+  BMHP: 'bmhp',
+  PKRT: 'pkrt',
+  LAINNYA: 'lainnya_alkes',
+};
+
+const ALL_GOLONGAN = {
+  ...GOLONGAN_OBAT,
+  ...GOLONGAN_ALKES,
 };
 
 const BENTUK_SEDIAAN = [
@@ -94,17 +102,13 @@ const SATUAN = [
   'Pcs', 'Pack', 'Rol', 'Lembar', 'Set', 'Kg', 'Gram', 'Liter', 'mL',
 ];
 
-const SUHU_PENYIMPANAN = {
-  RUANGAN: 'ruangan',
-  SEJUK: 'sejuk',
-  DINGIN: 'dingin',
-  BEKU: 'beku',
-};
+
 
 // ─── Supplier Constants ───
 
 const SUPPLIER_TYPE = {
   PBF: 'pbf',
+  DAK: 'dak',
   INDUSTRI: 'industri',
   IMPORTIR: 'importir',
   DISTRIBUTOR_ALKES: 'distributor_alkes',
@@ -115,12 +119,8 @@ const SUPPLIER_TYPE = {
 
 const PO_STATUS = {
   DRAFT: 'draft',
-  PENDING_APPROVAL: 'pending_approval',
-  APPROVED: 'approved',
   SENT: 'sent',
-  PARTIAL_RECEIVED: 'partial_received',
   RECEIVED: 'received',
-  CANCELLED: 'cancelled',
 };
 
 // ─── Goods Receiving Constants ───
@@ -212,12 +212,10 @@ const SELF_INSPECTION_SCHEDULE = {
 
 const SO_STATUS = {
   DRAFT: 'draft',
-  PACKED: 'packed',
-  DELIVERED: 'delivered',
-  PARTIAL_DELIVERED: 'partial_delivered',
-  RETURNED: 'returned',
+  SHIPPED: 'shipped',
+  AWAITING_PAYMENT: 'awaiting_payment',
   COMPLETED: 'completed',
-  CANCELED: 'canceled',
+  RETURNED: 'returned',
 };
 
 
@@ -341,6 +339,7 @@ const JOURNAL_SOURCE = {
   PAYMENT: 'payment',
   MEMO: 'memo',
   GOODS_RECEIVING: 'goods_receiving',
+  DELIVERY: 'delivery',
   RETURN: 'return',
   MANUAL: 'manual',
 };
@@ -449,9 +448,10 @@ module.exports = {
   UPLOAD,
   PRODUCT_CATEGORY,
   GOLONGAN_OBAT,
+  GOLONGAN_ALKES,
+  ALL_GOLONGAN,
   BENTUK_SEDIAAN,
   SATUAN,
-  SUHU_PENYIMPANAN,
   SUPPLIER_TYPE,
   PO_STATUS,
   GR_STATUS,

@@ -58,6 +58,22 @@ const updatePharmacist = catchAsync(async (req, res) => {
   });
 });
 
+const updatePharmacistObat = catchAsync(async (req, res) => {
+  const data = await appSettingService.updatePharmacistObat(req.body);
+  ApiResponse.success(res, {
+    message: 'Data apoteker PJ obat berhasil diperbarui',
+    data,
+  });
+});
+
+const updatePharmacistAlkes = catchAsync(async (req, res) => {
+  const data = await appSettingService.updatePharmacistAlkes(req.body);
+  ApiResponse.success(res, {
+    message: 'Data apoteker PJ alkes berhasil diperbarui',
+    data,
+  });
+});
+
 const updateTax = catchAsync(async (req, res) => {
   const data = await appSettingService.updateTax(req.body);
   ApiResponse.success(res, {
@@ -201,6 +217,8 @@ module.exports = {
   updateCompany,
   updateLicenses,
   updatePharmacist,
+  updatePharmacistObat,
+  updatePharmacistAlkes,
   updateTax,
   updateInvoice,
   updatePurchaseOrder,

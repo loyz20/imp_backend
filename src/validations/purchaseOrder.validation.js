@@ -134,25 +134,6 @@ const changeStatus = [
     .withMessage('Catatan maksimal 1000 karakter'),
 ];
 
-const approve = [
-  ...poIdParam,
-  body('notes')
-    .optional()
-    .trim()
-    .isLength({ max: 1000 })
-    .withMessage('Catatan maksimal 1000 karakter'),
-];
-
-const reject = [
-  ...poIdParam,
-  body('notes')
-    .trim()
-    .notEmpty()
-    .withMessage('Alasan penolakan wajib diisi')
-    .isLength({ min: 5, max: 1000 })
-    .withMessage('Alasan penolakan harus antara 5 dan 1000 karakter'),
-];
-
 const getPurchaseOrders = [
   query('page').optional().isInt({ min: 1 }).withMessage('Page harus bilangan positif'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit harus antara 1 dan 100'),
@@ -174,7 +155,5 @@ module.exports = {
   createPurchaseOrder,
   updatePurchaseOrder,
   changeStatus,
-  approve,
-  reject,
   getPurchaseOrders,
 };

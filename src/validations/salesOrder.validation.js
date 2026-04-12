@@ -9,12 +9,11 @@ const soIdParam = [
 ];
 
 const createSalesOrder = [
-  body('invoiceNumber')
-    .notEmpty()
-    .withMessage('Invoice number is required')
+  body('suratJalanNumber')
+    .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Invoice number must be max 100 characters'),
+    .withMessage('Nomor surat jalan maksimal 100 karakter'),
   body('customerId')
     .notEmpty()
     .withMessage('Customer wajib dipilih')
@@ -97,11 +96,11 @@ const createSalesOrder = [
 
 const updateSalesOrder = [
   ...soIdParam,
-  body('invoiceNumber')
+  body('suratJalanNumber')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Invoice number must be max 100 characters'),
+    .withMessage('Nomor surat jalan maksimal 100 karakter'),
   body('customerId')
     .optional()
     .isMongoId()
@@ -178,6 +177,15 @@ const updateSalesOrder = [
     .withMessage('Catatan item maksimal 500 karakter'),
 ];
 
+const generateInvoice = [
+  body('salesOrderIds')
+    .isArray({ min: 1 })
+    .withMessage('Minimal 1 surat jalan harus dipilih'),
+  body('salesOrderIds.*')
+    .isMongoId()
+    .withMessage('Invalid sales order ID'),
+];
+
 const changeStatus = [
   ...soIdParam,
   body('status')
@@ -237,6 +245,7 @@ module.exports = {
   soIdParam,
   createSalesOrder,
   updateSalesOrder,
+  generateInvoice,
   changeStatus,
   getSalesOrders,
 };

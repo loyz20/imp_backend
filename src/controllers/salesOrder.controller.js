@@ -22,10 +22,12 @@ const getSalesOrderById = catchAsync(async (req, res) => {
 });
 
 const createSalesOrder = catchAsync(async (req, res) => {
-  const so = await salesOrderService.createSalesOrder(req.body, req.user.id);
+  const salesOrders = await salesOrderService.createSalesOrder(req.body, req.user.id);
   ApiResponse.created(res, {
-    message: 'Sales order created successfully',
-    data: so,
+    message: salesOrders.length > 1
+      ? `${salesOrders.length} Sales orders created successfully (obat & alkes dipisah)`
+      : 'Sales order created successfully',
+    data: salesOrders,
   });
 });
 
@@ -50,6 +52,14 @@ const changeStatus = catchAsync(async (req, res) => {
   });
 });
 
+const generateInvoice = catchAsync(async (req, res) => {
+  const invoices = await salesOrderService.generateInvoice(req.body.salesOrderIds, req.user.id);
+  ApiResponse.created(res, {
+    message: `${invoices.length} invoice berhasil dibuat dari surat jalan`,
+    data: invoices,
+  });
+});
+
 module.exports = {
   getSalesOrders,
   getStats,
@@ -58,4 +68,5 @@ module.exports = {
   updateSalesOrder,
   deleteSalesOrder,
   changeStatus,
+  generateInvoice,
 };

@@ -86,6 +86,14 @@ router
     soController.createSalesOrder,
   );
 
+// ─── Generate Invoice from multiple Surat Jalan ───
+router.post(
+  '/generate-invoice',
+  authorize(SUPERADMIN, ADMIN, KEUANGAN, SALES),
+  validate(soValidation.generateInvoice),
+  soController.generateInvoice,
+);
+
 // ─── Single SO ───
 router
   .route('/:id')

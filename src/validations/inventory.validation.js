@@ -27,7 +27,6 @@ const getStock = [
   query('kategori').optional({ values: 'falsy' }).trim(),
   query('golongan').optional({ values: 'falsy' }).trim(),
   query('stockStatus').optional({ values: 'falsy' }).isIn(['normal', 'low', 'out_of_stock', 'overstock']).withMessage('stockStatus tidak valid'),
-  query('suhuPenyimpanan').optional({ values: 'falsy' }).trim(),
   query('sort').optional().trim().isLength({ max: 50 }),
 ];
 
