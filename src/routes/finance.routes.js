@@ -93,6 +93,14 @@ router.get(
   financeController.getPayables,
 );
 
+// ─── INVOICES ───
+router.get(
+  '/invoices/:id',
+  authorize(SUPERADMIN, ADMIN, KEUANGAN, SALES),
+  validate(financeValidation.idParam),
+  financeController.getInvoiceById,
+);
+
 router.post(
   '/payables',
   authorize(SUPERADMIN, ADMIN, KEUANGAN),

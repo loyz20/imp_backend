@@ -350,13 +350,19 @@ const mongoCreatePurchaseInvoiceFromGR = async (gr, po, userId) => {
 // ═══════════════════════════════════════════════════════════════
 
 const mongoGetReceivables = async (queryParams) => {
-  const { search, aging, sort } = queryParams;
+  const { search, aging, sort, status } = queryParams;
   const now = new Date();
 
-  const matchStage = {
-    status: { $in: ['sent', 'partially_paid', 'overdue'] },
-    remainingAmount: { $gt: 0 },
-  };
+  const matchStage = {};
+
+  if (status === 'paid') {
+    matchStage.status = INVOICE_STATUS.PAID;
+  } else if (status === 'all') {
+    // no status filter — return all
+  } else {
+    matchStage.status = { $in: ['sent', 'partially_paid', 'overdue'] };
+    matchStage.remainingAmount = { $gt: 0 };
+  }
 
   const pipeline = [
     { $match: matchStage },
@@ -486,14 +492,21 @@ const mongoGetReceivables = async (queryParams) => {
 // ═══════════════════════════════════════════════════════════════
 
 const mongoGetPayables = async (queryParams) => {
-  const { search, aging, sort, dateFrom, dateTo } = queryParams;
+  const { search, aging, sort, dateFrom, dateTo, status } = queryParams;
   const now = new Date();
 
   const matchStage = {
     invoiceType: 'purchase',
-    status: { $in: [INVOICE_STATUS.SENT, INVOICE_STATUS.PARTIALLY_PAID, INVOICE_STATUS.OVERDUE] },
-    remainingAmount: { $gt: 0 },
   };
+
+  if (status === 'paid') {
+    matchStage.status = INVOICE_STATUS.PAID;
+  } else if (status === 'all') {
+    // no status filter — return all
+  } else {
+    matchStage.status = { $in: [INVOICE_STATUS.SENT, INVOICE_STATUS.PARTIALLY_PAID, INVOICE_STATUS.OVERDUE] };
+    matchStage.remainingAmount = { $gt: 0 };
+  }
 
   if (dateFrom || dateTo) {
     matchStage.invoiceDate = {};
@@ -2464,9 +2477,17 @@ const mysqlCreateJournalFromMemo = async (memo) => {
 const mysqlGetReceivables = async (queryParams) => {
   const pool = getMySQLPool();
   if (!pool) throw ApiError.internal('MySQL pool not initialized');
-  const { search, aging, page = 1, limit = 20 } = queryParams;
+  const { search, aging, status, page = 1, limit = 20 } = queryParams;
   const offset = (Number(page) - 1) * Number(limit);
-  const whereClauses = ["inv.status IN ('sent','partially_paid','overdue')", 'inv.remaining_amount > 0', "inv.invoice_type = 'sales'"]; const params = [];
+  const whereClauses = ["inv.invoice_type = 'sales'"]; const params = [];
+  if (status === 'paid') {
+    whereClauses.push("inv.status = 'paid'");
+  } else if (status === 'all') {
+    // no status filter
+  } else {
+    whereClauses.push("inv.status IN ('sent','partially_paid','overdue')");
+    whereClauses.push('inv.remaining_amount > 0');
+  }
   if (search) { whereClauses.push('(c.name LIKE ? OR inv.invoice_number LIKE ?)'); const sl = `%${search}%`; params.push(sl, sl); }
   const where = `WHERE ${whereClauses.join(' AND ')}`;
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) as total FROM invoices inv LEFT JOIN customers c ON inv.customer_id = c.id ${where}`, params);
@@ -2477,9 +2498,17 @@ const mysqlGetReceivables = async (queryParams) => {
 const mysqlGetPayables = async (queryParams) => {
   const pool = getMySQLPool();
   if (!pool) throw ApiError.internal('MySQL pool not initialized');
-  const { search, page = 1, limit = 20 } = queryParams;
+  const { search, status, page = 1, limit = 20 } = queryParams;
   const offset = (Number(page) - 1) * Number(limit);
-  const whereClauses = ["inv.status IN ('sent','partially_paid','overdue')", 'inv.remaining_amount > 0', "inv.invoice_type = 'purchase'"]; const params = [];
+  const whereClauses = ["inv.invoice_type = 'purchase'"]; const params = [];
+  if (status === 'paid') {
+    whereClauses.push("inv.status = 'paid'");
+  } else if (status === 'all') {
+    // no status filter
+  } else {
+    whereClauses.push("inv.status IN ('sent','partially_paid','overdue')");
+    whereClauses.push('inv.remaining_amount > 0');
+  }
   if (search) { whereClauses.push('(s.name LIKE ? OR inv.invoice_number LIKE ?)'); const sl = `%${search}%`; params.push(sl, sl); }
   const where = `WHERE ${whereClauses.join(' AND ')}`;
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) as total FROM invoices inv LEFT JOIN suppliers s ON inv.supplier_id = s.id ${where}`, params);
@@ -2777,6 +2806,69 @@ const getBankTransactions = (q) => config.dbProvider === 'mysql' ? mysqlGetBankT
 const createBankTransaction = (data, userId) => config.dbProvider === 'mysql' ? mysqlCreateBankTransaction(data, userId) : mongoCreateBankTransaction(data, userId);
 const createReturnCOGSReversal = (ret) => config.dbProvider === 'mysql' ? mysqlCreateReturnCOGSReversal(ret) : mongoCreateReturnCOGSReversal(ret);
 
+const mongoGetInvoiceById = async (id) => {
+  const invoice = await Invoice.findById(id)
+    .populate('customerId', 'name code type phone')
+    .populate('supplierId', 'name code')
+    .populate('salesOrderIds', 'suratJalanNumber status soCategory')
+    .populate('purchaseOrderId', 'poNumber status')
+    .populate('goodsReceivingId', 'grNumber')
+    .populate('items.productId', 'name sku golongan satuan')
+    .populate('createdBy', 'name')
+    .populate('updatedBy', 'name');
+  if (!invoice) throw ApiError.notFound('Invoice tidak ditemukan');
+  return invoice;
+};
+
+const mysqlGetInvoiceById = async (id) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool not initialized');
+  const [[row]] = await pool.query(
+    `SELECT inv.*, c.name as customer_name, c.code as customer_code, c.type as customer_type, c.phone as customer_phone,
+     s.name as supplier_name, s.code as supplier_code,
+     u1.name as created_by_name, u2.name as updated_by_name
+     FROM invoices inv
+     LEFT JOIN customers c ON inv.customer_id = c.id
+     LEFT JOIN suppliers s ON inv.supplier_id = s.id
+     LEFT JOIN users u1 ON inv.created_by = u1.id
+     LEFT JOIN users u2 ON inv.updated_by = u2.id
+     WHERE inv.id = ? LIMIT 1`, [id],
+  );
+  if (!row) throw ApiError.notFound('Invoice tidak ditemukan');
+  const [items] = await pool.query(
+    `SELECT ii.*, p.name as product_name, p.sku as product_sku, p.golongan as product_golongan, p.satuan as product_satuan
+     FROM invoice_items ii LEFT JOIN products p ON ii.product_id = p.id
+     WHERE ii.invoice_id = ? ORDER BY ii.sort_order ASC`, [id],
+  );
+  let salesOrderIds = [];
+  if (row.sales_order_id) {
+    try { salesOrderIds = JSON.parse(row.sales_order_id); } catch { salesOrderIds = [row.sales_order_id]; }
+  }
+  return {
+    id: row.id, _id: row.id,
+    invoiceNumber: row.invoice_number, invoiceType: row.invoice_type, invoiceCategory: row.invoice_category, status: row.status,
+    salesOrderIds,
+    purchaseOrderId: row.purchase_order_id, goodsReceivingId: row.goods_receiving_id,
+    customerId: row.customer_id ? { _id: row.customer_id, name: row.customer_name, code: row.customer_code, type: row.customer_type, phone: row.customer_phone } : null,
+    supplierId: row.supplier_id ? { _id: row.supplier_id, name: row.supplier_name, code: row.supplier_code } : null,
+    invoiceDate: row.invoice_date, dueDate: row.due_date, sentAt: row.sent_at, paidAt: row.paid_at,
+    items: items.map((i) => ({
+      id: i.id, _id: i.id,
+      productId: { _id: i.product_id, name: i.product_name, sku: i.product_sku, golongan: i.product_golongan, satuan: i.product_satuan },
+      satuan: i.satuan, quantity: i.quantity, unitPrice: Number(i.unit_price), discount: Number(i.discount), subtotal: Number(i.subtotal),
+      batchNumber: i.batch_number, expiryDate: i.expiry_date,
+    })),
+    subtotal: Number(row.subtotal), ppnRate: Number(row.ppn_rate), ppnAmount: Number(row.ppn_amount), discount: Number(row.discount || 0),
+    totalAmount: Number(row.total_amount), paidAmount: Number(row.paid_amount), remainingAmount: Number(row.remaining_amount),
+    paymentTermDays: row.payment_term_days, notes: row.notes,
+    createdBy: row.created_by ? { _id: row.created_by, name: row.created_by_name } : null,
+    updatedBy: row.updated_by ? { _id: row.updated_by, name: row.updated_by_name } : null,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+};
+
+const getInvoiceById = (id) => config.dbProvider === 'mysql' ? mysqlGetInvoiceById(id) : mongoGetInvoiceById(id);
+
 module.exports = {
   // Integrations
   createInvoiceFromDelivery,
@@ -2813,4 +2905,6 @@ module.exports = {
   createBankTransaction,
   // Return Integration
   createReturnCOGSReversal,
+  // Invoice
+  getInvoiceById,
 };

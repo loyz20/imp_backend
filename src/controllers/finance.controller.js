@@ -119,6 +119,11 @@ const createBankTransaction = catchAsync(async (req, res) => {
   ApiResponse.created(res, { data, message: 'Transaksi bank berhasil dibuat' });
 });
 
+const getInvoiceById = catchAsync(async (req, res) => {
+  const data = await financeService.getInvoiceById(req.params.id);
+  ApiResponse.success(res, { data, message: 'Berhasil mengambil detail invoice' });
+});
+
 module.exports = {
   getReceivables,
   createReceivablePayment,
@@ -139,4 +144,5 @@ module.exports = {
   getCashFlowReport,
   getBankTransactions,
   createBankTransaction,
+  getInvoiceById,
 };
