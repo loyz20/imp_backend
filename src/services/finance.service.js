@@ -22,6 +22,7 @@ const {
   JOURNAL_STATUS,
   MATCH_STATUS,
   GOLONGAN_ALKES,
+  SO_STATUS,
 } = require('../constants');
 const config = require('../config');
 const { getMySQLPool } = require('../config/database');
@@ -856,6 +857,14 @@ const verifyPayment = async (id, notes, userId) => {
       }
       invoice.updatedBy = userId;
       await invoice.save();
+
+      // Side effect: complete linked SOs when sales invoice is fully paid
+      if (invoice.remainingAmount <= 0 && invoice.invoiceType === 'sales' && invoice.salesOrderIds?.length > 0) {
+        await SalesOrder.updateMany(
+          { _id: { $in: invoice.salesOrderIds }, status: SO_STATUS.AWAITING_PAYMENT },
+          { $set: { status: SO_STATUS.COMPLETED, completedAt: new Date(), updatedBy: userId } },
+        );
+      }
     }
   }
 
@@ -2490,6 +2499,19 @@ const mysqlPayReceivable = async (invoiceId, data, userId) => {
   const newRemaining = Number(inv.remaining_amount) - payAmount;
   const newStatus = newRemaining <= 0 ? INVOICE_STATUS.PAID : INVOICE_STATUS.PARTIALLY_PAID;
   await pool.query('UPDATE invoices SET paid_amount = paid_amount + ?, remaining_amount = ?, status = ?, updated_at = NOW() WHERE id = ?', [payAmount, newRemaining, newStatus, invoiceId]);
+
+  // Side effect: complete linked SOs when sales invoice is fully paid
+  if (newRemaining <= 0 && inv.invoice_type === 'sales') {
+    const [[invFull]] = await pool.query('SELECT sales_order_id FROM invoices WHERE id = ? LIMIT 1', [invoiceId]);
+    if (invFull?.sales_order_id) {
+      let soIds;
+      try { soIds = JSON.parse(invFull.sales_order_id); } catch { soIds = [invFull.sales_order_id]; }
+      if (Array.isArray(soIds) && soIds.length > 0) {
+        await pool.query(`UPDATE sales_orders SET status = ?, completed_at = NOW(), updated_by = ?, updated_at = NOW() WHERE id IN (${soIds.map(() => '?').join(',')}) AND status = ?`, [SO_STATUS.COMPLETED, userId, ...soIds, SO_STATUS.AWAITING_PAYMENT]);
+      }
+    }
+  }
+
   // Auto-create journal entry for payment
   try {
     await mysqlCreateJournalFromPayment({ id: payId, invoiceType: inv.invoice_type, amount: payAmount, paymentDate: data.paymentDate || new Date(), referenceNumber: data.referenceNumber || null, createdBy: userId });
