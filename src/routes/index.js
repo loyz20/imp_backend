@@ -15,6 +15,7 @@ const returnRoutes = require('./return.routes');
 const financeRoutes = require('./finance.routes');
 const reportRoutes = require('./report.routes');
 const regulationRoutes = require('./regulation.routes');
+const adminRoutes = require('./admin.routes');
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
@@ -30,5 +31,6 @@ router.use('/returns', returnRoutes);
 router.use('/finance', financeRoutes);
 router.use('/reports', reportRoutes);
 router.use('/regulation', regulationRoutes);
+router.use('/admin', adminRoutes);
 
 module.exports = router;
