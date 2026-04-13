@@ -2808,7 +2808,7 @@ const createReturnCOGSReversal = (ret) => config.dbProvider === 'mysql' ? mysqlC
 
 const mongoGetInvoiceById = async (id) => {
   const invoice = await Invoice.findById(id)
-    .populate('customerId', 'name code type phone')
+    .populate('customerId', 'name code type phone address')
     .populate('supplierId', 'name code')
     .populate('salesOrderIds', 'suratJalanNumber status soCategory')
     .populate('purchaseOrderId', 'poNumber status')
@@ -2824,7 +2824,7 @@ const mysqlGetInvoiceById = async (id) => {
   const pool = getMySQLPool();
   if (!pool) throw ApiError.internal('MySQL pool not initialized');
   const [[row]] = await pool.query(
-    `SELECT inv.*, c.name as customer_name, c.code as customer_code, c.type as customer_type, c.phone as customer_phone,
+    `SELECT inv.*, c.name as customer_name, c.code as customer_code, c.type as customer_type, c.phone as customer_phone, c.address_street as customer_address_street, c.address_city as customer_address_city, c.address_province as customer_address_province,
      s.name as supplier_name, s.code as supplier_code,
      u1.name as created_by_name, u2.name as updated_by_name
      FROM invoices inv
@@ -2849,7 +2849,7 @@ const mysqlGetInvoiceById = async (id) => {
     invoiceNumber: row.invoice_number, invoiceType: row.invoice_type, invoiceCategory: row.invoice_category, status: row.status,
     salesOrderIds,
     purchaseOrderId: row.purchase_order_id, goodsReceivingId: row.goods_receiving_id,
-    customerId: row.customer_id ? { _id: row.customer_id, name: row.customer_name, code: row.customer_code, type: row.customer_type, phone: row.customer_phone } : null,
+    customerId: row.customer_id ? { _id: row.customer_id, name: row.customer_name, code: row.customer_code, type: row.customer_type, phone: row.customer_phone, address: { street: row.customer_address_street, city: row.customer_address_city, province: row.customer_address_province } } : null,
     supplierId: row.supplier_id ? { _id: row.supplier_id, name: row.supplier_name, code: row.supplier_code } : null,
     invoiceDate: row.invoice_date, dueDate: row.due_date, sentAt: row.sent_at, paidAt: row.paid_at,
     items: items.map((i) => ({

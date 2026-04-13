@@ -2,9 +2,11 @@ const express = require('express');
 
 const router = express.Router();
 const financeController = require('../controllers/finance.controller');
+const reportController = require('../controllers/report.controller');
 const { auth, authorize } = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const financeValidation = require('../validations/finance.validation');
+const reportValidation = require('../validations/report.validation');
 const { USER_ROLES } = require('../constants');
 
 const { SUPERADMIN, ADMIN, KEUANGAN, SALES } = USER_ROLES;
@@ -164,6 +166,20 @@ router.get(
   authorize(SUPERADMIN, ADMIN, KEUANGAN),
   validate(financeValidation.getLedger),
   financeController.getLedger,
+);
+
+// ─── Dashboard (alias to report endpoints) ───
+router.get(
+  '/dashboard/stats',
+  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  validate(reportValidation.getFinanceStats),
+  reportController.getFinanceStats,
+);
+router.get(
+  '/dashboard/chart',
+  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  validate(reportValidation.getFinanceChart),
+  reportController.getFinanceChart,
 );
 
 module.exports = router;

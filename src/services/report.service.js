@@ -694,9 +694,20 @@ const mongoGetFinanceStats = async (queryParams) => {
 };
 
 const mongoGetFinanceChart = async (queryParams) => {
-  const { period, dateFrom, dateTo } = queryParams;
-  const dateRange = getDateRange(period || 'monthly', dateFrom, dateTo);
-  const groupFormat = getTrendGroupFormat(period || 'monthly');
+  const { period, dateFrom, dateTo, months } = queryParams;
+  let dateRange;
+  let effectivePeriod = period || 'monthly';
+  if (months) {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - (Number(months) - 1), 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    dateRange = { $gte: start, $lte: end };
+    effectivePeriod = 'monthly';
+  } else {
+    dateRange = getDateRange(effectivePeriod, dateFrom, dateTo);
+  }
+  const groupFormat = getTrendGroupFormat(effectivePeriod);
 
   const paymentMatch = { status: FINANCE_PAYMENT_STATUS.VERIFIED };
   if (dateRange.$gte || dateRange.$lte) paymentMatch.paymentDate = dateRange;
@@ -1780,7 +1791,7 @@ const mysqlBuildStockWhere = (queryParams) => {
 };
 
 const mysqlStockBaseQuery = (where, stockStatusFilter) => {
-  let q = `SELECT p.id, p.code, p.sku, p.name, p.category, p.golongan, p.satuan, p.satuan_kecil, p.stok_minimum,
+  let q = `SELECT p.id, p.sku, p.name, p.category, p.golongan, p.satuan, p.satuan_kecil, p.stok_minimum,
     COALESCE(sb.total_stock, 0) AS total_stock,
     COALESCE(sb.stock_value, 0) AS stock_value,
     CASE
@@ -2006,10 +2017,19 @@ const mysqlGetFinanceStats = async (queryParams) => {
 
 const mysqlGetFinanceChart = async (queryParams) => {
   const pool = getMySQLPool();
-  const { period, dateFrom, dateTo } = queryParams;
-  const { start, end } = getMySQLDateRange(period || 'monthly', dateFrom, dateTo);
-  const dateFormat = getMySQLTrendFormat(period || 'monthly');
-  const groupFormat = getTrendGroupFormat(period || 'monthly');
+  const { period, dateFrom, dateTo, months } = queryParams;
+  let start; let end; let effectivePeriod = period || 'monthly';
+  if (months) {
+    const now = new Date();
+    start = new Date(now.getFullYear(), now.getMonth() - (Number(months) - 1), 1);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    effectivePeriod = 'monthly';
+  } else {
+    ({ start, end } = getMySQLDateRange(effectivePeriod, dateFrom, dateTo));
+  }
+  const dateFormat = getMySQLTrendFormat(effectivePeriod);
+  const groupFormat = getTrendGroupFormat(effectivePeriod);
 
   const payWhere = []; const payParams = [];
   if (start) { payWhere.push('p.payment_date >= ?'); payParams.push(start); }

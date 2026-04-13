@@ -166,7 +166,10 @@ const getFinanceReport = [
 ];
 
 const getFinanceStats = [...getFinanceReport];
-const getFinanceChart = [...getFinanceReport];
+const getFinanceChart = [
+  ...getFinanceReport,
+  query('months').optional({ values: 'falsy' }).isInt({ min: 1, max: 24 }).withMessage('months harus antara 1-24'),
+];
 const exportFinance = [...getFinanceReport];
 
 // ─── Expired ───

@@ -91,7 +91,7 @@ const mongoGetSPStats = async () => {
 
 const mongoGetSPById = async (id) => {
   const sp = await SuratPesananKhusus.findById(id)
-    .populate('supplier', 'name code')
+    .populate('supplier', 'name code phone address')
     .populate('items.product', 'name sku code')
     .populate('createdBy', 'name')
     .populate('approvedBy', 'name');
@@ -640,10 +640,10 @@ const mongoSyncCompanyDocuments = async () => {
 const mapSPRow = (row, items = []) => ({
   id: row.id, _id: row.id,
   spNumber: row.sp_number, date: row.date, type: row.type,
-  supplier: row.supplier_id ? { _id: row.supplier_id, id: row.supplier_id, name: row.supplier_name, code: row.supplier_code } : null,
+  supplier: row.supplier_id ? { _id: row.supplier_id, id: row.supplier_id, name: row.supplier_name, code: row.supplier_code, phone: row.supplier_phone, address: { street: row.supplier_address_street, city: row.supplier_address_city, province: row.supplier_address_province } } : null,
   validUntil: row.valid_until, status: row.status, notes: row.notes, rejectReason: row.reject_reason,
   items: items.map((i) => ({
-    product: { _id: i.product_id, id: i.product_id, name: i.product_name, sku: i.product_sku, code: i.product_code },
+    product: { _id: i.product_id, id: i.product_id, name: i.product_name, sku: i.product_sku },
     qty: i.qty, unit: i.unit,
   })),
   createdBy: row.created_by ? { _id: row.created_by, name: row.created_by_name } : null,
@@ -665,13 +665,13 @@ const mapEReportRow = (row, items = []) => ({
 
 const mysqlGetSPWithItems = async (pool, id) => {
   const [[row]] = await pool.query(
-    `SELECT sp.*, s.name as supplier_name, s.code as supplier_code, u1.name as created_by_name, u2.name as approved_by_name
+    `SELECT sp.*, s.name as supplier_name, s.code as supplier_code, s.phone as supplier_phone, s.address_street as supplier_address_street, s.address_city as supplier_address_city, s.address_province as supplier_address_province, u1.name as created_by_name, u2.name as approved_by_name
      FROM surat_pesanan_khusus sp LEFT JOIN suppliers s ON sp.supplier_id = s.id LEFT JOIN users u1 ON sp.created_by = u1.id LEFT JOIN users u2 ON sp.approved_by = u2.id
      WHERE sp.id = ? LIMIT 1`, [id],
   );
   if (!row) return null;
   const [items] = await pool.query(
-    `SELECT si.*, p.name as product_name, p.sku as product_sku, p.code as product_code
+    `SELECT si.*, p.name as product_name, p.sku as product_sku
      FROM sp_items si LEFT JOIN products p ON si.product_id = p.id WHERE si.sp_id = ? ORDER BY si.sort_order`, [id],
   );
   return mapSPRow(row, items);
@@ -689,14 +689,14 @@ const mysqlGetSPList = async (queryParams) => {
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) as total FROM surat_pesanan_khusus sp ${w}`, params);
   const [rows] = await pool.query(
-    `SELECT sp.*, s.name as supplier_name, s.code as supplier_code, u1.name as created_by_name, u2.name as approved_by_name
+    `SELECT sp.*, s.name as supplier_name, s.code as supplier_code, s.phone as supplier_phone, s.address_street as supplier_address_street, s.address_city as supplier_address_city, s.address_province as supplier_address_province, u1.name as created_by_name, u2.name as approved_by_name
      FROM surat_pesanan_khusus sp LEFT JOIN suppliers s ON sp.supplier_id = s.id LEFT JOIN users u1 ON sp.created_by = u1.id LEFT JOIN users u2 ON sp.approved_by = u2.id
      ${w} ORDER BY sp.created_at DESC LIMIT ? OFFSET ?`, [...params, Number(limit), offset],
   );
   const spIds = rows.map((r) => r.id); let itemsMap = {};
   if (spIds.length > 0) {
     const [allItems] = await pool.query(
-      `SELECT si.*, p.name as product_name, p.sku as product_sku, p.code as product_code
+      `SELECT si.*, p.name as product_name, p.sku as product_sku
        FROM sp_items si LEFT JOIN products p ON si.product_id = p.id WHERE si.sp_id IN (${spIds.map(() => '?').join(',')}) ORDER BY si.sort_order`, spIds,
     );
     for (const item of allItems) { (itemsMap[item.sp_id] = itemsMap[item.sp_id] || []).push(item); }
