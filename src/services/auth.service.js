@@ -1,11 +1,32 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const ApiError = require('../utils/ApiError');
 const config = require('../config');
-const MySQLAuthService = require('./auth.service.mysql');
+const { getMySQLPool } = require('../config/database');
 
-// ─── Token Generation ───
+const mapMysqlUserRow = (row) => ({
+  id: row.id,
+  _id: row.id,
+  name: row.name,
+  email: row.email,
+  phone: row.phone,
+  avatar: row.avatar,
+  role: row.role,
+  isActive: row.is_active === 1,
+  isEmailVerified: row.is_email_verified === 1,
+  address: row.address_street ? {
+    street: row.address_street,
+    city: row.address_city,
+    province: row.address_province,
+    postalCode: row.address_postal_code,
+    country: row.address_country,
+  } : {},
+  lastLoginAt: row.last_login_at,
+  lastLoginIp: row.last_login_ip,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
 
 const generateTokens = (userId, role) => {
   const accessToken = jwt.sign({ id: userId, role }, config.jwt.secret, {
@@ -17,67 +38,137 @@ const generateTokens = (userId, role) => {
   return { accessToken, refreshToken };
 };
 
-// ─── Mongo Implementations ───
+const register = async ({ name, email, password }) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
 
-const mongoRegister = async ({ name, email, password }) => {
-  const existingUser = await User.findByEmail(email);
-  if (existingUser) {
+  const [existingRows] = await pool.query(
+    'SELECT id FROM users WHERE email = ? LIMIT 1',
+    [email.toLowerCase()],
+  );
+  if (existingRows.length > 0) {
     throw ApiError.conflict('Email already registered');
   }
 
-  const user = await User.create({ name, email, password });
-  const tokens = generateTokens(user._id, user.role);
+  const userId = crypto.randomUUID();
+  const passwordHash = await bcrypt.hash(password, 12);
+  const tokens = generateTokens(userId, 'user');
+  const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+  const emailVerificationTokenHash = crypto
+    .createHash('sha256')
+    .update(emailVerificationToken)
+    .digest('hex');
+  const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-  user.refreshToken = tokens.refreshToken;
-  const emailVerificationToken = user.createEmailVerificationToken();
-  await user.save({ validateBeforeSave: false });
-
-  return { user, tokens, emailVerificationToken };
-};
-
-const mongoLogin = async ({ email, password, ip }) => {
-  const user = await User.findOne({ email }).select(
-    '+password +loginAttempts +lockUntil +refreshToken',
+  await pool.query(
+    `
+      INSERT INTO users (
+        id, name, email, password_hash, role,
+        email_verification_token, email_verification_expires,
+        refresh_token, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `,
+    [
+      userId,
+      name,
+      email.toLowerCase(),
+      passwordHash,
+      'user',
+      emailVerificationTokenHash,
+      emailVerificationExpires,
+      tokens.refreshToken,
+    ],
   );
 
-  if (!user) {
+  const [userRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  return {
+    user: mapMysqlUserRow(userRows[0]),
+    tokens,
+    emailVerificationToken,
+  };
+};
+
+const login = async ({ email, password, ip }) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE email = ? LIMIT 1',
+    [email.toLowerCase()],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.unauthorized('Invalid email or password');
   }
 
-  if (user.isLocked) {
+  const user = rows[0];
+
+  // Check if account is locked
+  if (user.lock_until && new Date(user.lock_until) > new Date()) {
     throw ApiError.forbidden(
       'Account is temporarily locked due to too many failed login attempts. Please try again later.',
     );
   }
 
-  if (!user.isActive) {
+  // Check if account is active
+  if (!user.is_active) {
     throw ApiError.forbidden('Your account has been deactivated. Please contact support.');
   }
 
-  const isPasswordValid = await user.comparePassword(password);
+  // Verify password
+  const isPasswordValid = await bcrypt.compare(password, user.password_hash);
   if (!isPasswordValid) {
-    await user.incrementLoginAttempts();
+    const newAttempts = Number(user.login_attempts || 0) + 1;
+    const MAX_ATTEMPTS = 5;
+    const LOCK_TIME = 30 * 60 * 1000;
+
+    if (newAttempts >= MAX_ATTEMPTS) {
+      const lockUntil = new Date(Date.now() + LOCK_TIME);
+      await pool.query(
+        'UPDATE users SET login_attempts = ?, lock_until = ? WHERE id = ?',
+        [newAttempts, lockUntil, user.id],
+      );
+    } else {
+      await pool.query(
+        'UPDATE users SET login_attempts = ? WHERE id = ?',
+        [newAttempts, user.id],
+      );
+    }
     throw ApiError.unauthorized('Invalid email or password');
   }
 
-  await user.resetLoginAttempts();
-  const tokens = generateTokens(user._id, user.role);
+  // Reset login attempts on successful login
+  const tokens = generateTokens(user.id, user.role);
 
-  user.refreshToken = tokens.refreshToken;
-  user.lastLoginAt = new Date();
-  user.lastLoginIp = ip;
-  await user.save({ validateBeforeSave: false });
+  // Update login tracking
+  await pool.query(
+    'UPDATE users SET refresh_token = ?, last_login_at = NOW(), last_login_ip = ?, login_attempts = 0, lock_until = NULL WHERE id = ?',
+    [tokens.refreshToken, ip, user.id],
+  );
 
-  return { user, tokens };
+  const [updatedRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [user.id],
+  );
+
+  return { user: mapMysqlUserRow(updatedRows[0]), tokens };
 };
 
-const mongoLogout = async (userId) => {
-  await User.findByIdAndUpdate(userId, {
-    $unset: { refreshToken: 1 },
-  });
+const logout = async (userId) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  await pool.query(
+    'UPDATE users SET refresh_token = NULL WHERE id = ?',
+    [userId],
+  );
 };
 
-const mongoRefreshToken = async (token) => {
+const refreshToken = async (token) => {
   let decoded;
   try {
     decoded = jwt.verify(token, config.jwt.refreshSecret);
@@ -85,228 +176,251 @@ const mongoRefreshToken = async (token) => {
     throw ApiError.unauthorized('Invalid or expired refresh token');
   }
 
-  const user = await User.findById(decoded.id).select('+refreshToken');
-  if (!user) {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT refresh_token FROM users WHERE id = ? LIMIT 1',
+    [decoded.id],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.unauthorized('User not found');
   }
 
-  if (user.refreshToken !== token) {
-    user.refreshToken = undefined;
-    await user.save({ validateBeforeSave: false });
+  const user = rows[0];
+
+  // Verify that the refresh token matches stored token (token rotation)
+  if (user.refresh_token !== token) {
+    // Possible token reuse attack — clear all tokens
+    await pool.query('UPDATE users SET refresh_token = NULL WHERE id = ?', [decoded.id]);
     throw ApiError.unauthorized('Token reuse detected. Please login again.');
   }
 
-  const tokens = generateTokens(user._id, user.role);
-  user.refreshToken = tokens.refreshToken;
-  await user.save({ validateBeforeSave: false });
+  const tokens = generateTokens(decoded.id, decoded.role);
+
+  // Rotate refresh token
+  await pool.query(
+    'UPDATE users SET refresh_token = ? WHERE id = ?',
+    [tokens.refreshToken, decoded.id],
+  );
 
   return tokens;
 };
 
-const mongoGetMe = async (userId) => {
-  const user = await User.findById(userId);
-  if (!user) {
+const getMe = async (userId) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.notFound('User not found');
   }
-  return user;
+
+  return mapMysqlUserRow(rows[0]);
 };
 
-const mongoUpdateProfile = async (userId, updateData) => {
+const updateProfile = async (userId, updateData) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
   const allowedFields = ['name', 'phone', 'address'];
-  const filteredData = {};
+  const setClauses = [];
+  const values = [];
 
   for (const key of allowedFields) {
     if (updateData[key] !== undefined) {
-      filteredData[key] = updateData[key];
+      if (key === 'address' && typeof updateData[key] === 'object') {
+        setClauses.push('address_street = ?, address_city = ?, address_province = ?, address_postal_code = ?, address_country = ?');
+        values.push(
+          updateData[key].street || null,
+          updateData[key].city || null,
+          updateData[key].province || null,
+          updateData[key].postalCode || null,
+          updateData[key].country || null,
+        );
+      } else if (key !== 'address') {
+        setClauses.push(`${key} = ?`);
+        values.push(updateData[key]);
+      }
     }
   }
 
-  const user = await User.findByIdAndUpdate(userId, filteredData, {
-    new: true,
-    runValidators: true,
-  });
-
-  if (!user) {
-    throw ApiError.notFound('User not found');
+  if (setClauses.length === 0) {
+    const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (rows.length === 0) throw ApiError.notFound('User not found');
+    return mapMysqlUserRow(rows[0]);
   }
 
-  return user;
+  setClauses.push('updated_at = NOW()');
+  values.push(userId);
+
+  await pool.query(
+    `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`,
+    values,
+  );
+
+  const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
+  if (rows.length === 0) throw ApiError.notFound('User not found');
+  return mapMysqlUserRow(rows[0]);
 };
 
-const mongoChangePassword = async (userId, { currentPassword, newPassword }) => {
-  const user = await User.findById(userId).select('+password');
-  if (!user) {
+const changePassword = async (userId, { currentPassword, newPassword }) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT password_hash FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.notFound('User not found');
   }
 
-  const isMatch = await user.comparePassword(currentPassword);
+  const isMatch = await bcrypt.compare(currentPassword, rows[0].password_hash);
   if (!isMatch) {
     throw ApiError.badRequest('Current password is incorrect');
   }
 
-  user.password = newPassword;
-  user.refreshToken = undefined;
-  await user.save();
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+  const tokens = generateTokens(userId, rows[0].role);
 
-  const tokens = generateTokens(user._id, user.role);
-  user.refreshToken = tokens.refreshToken;
-  await user.save({ validateBeforeSave: false });
+  await pool.query(
+    'UPDATE users SET password_hash = ?, password_changed_at = NOW(), refresh_token = ? WHERE id = ?',
+    [newPasswordHash, tokens.refreshToken, userId],
+  );
 
   return tokens;
 };
 
-const mongoForgotPassword = async (email) => {
-  const user = await User.findByEmail(email);
-  if (!user) {
+const forgotPassword = async (email) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE email = ? LIMIT 1',
+    [email.toLowerCase()],
+  );
+
+  if (rows.length === 0) {
+    // Don't reveal whether user exists
     return null;
   }
 
-  const resetToken = user.createPasswordResetToken();
-  await user.save({ validateBeforeSave: false });
-
-  return { resetToken, user };
-};
-
-const mongoResetPassword = async (token, newPassword) => {
-  const hashedToken = crypto
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const resetTokenHash = crypto
     .createHash('sha256')
-    .update(token)
+    .update(resetToken)
     .digest('hex');
+  const resetExpires = new Date(Date.now() + 15 * 60 * 1000);
 
-  const user = await User.findOne({
-    passwordResetToken: hashedToken,
-    passwordResetExpires: { $gt: Date.now() },
-  });
+  await pool.query(
+    'UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?',
+    [resetTokenHash, resetExpires, rows[0].id],
+  );
 
-  if (!user) {
-    throw ApiError.badRequest('Token is invalid or has expired');
-  }
-
-  user.password = newPassword;
-  user.passwordResetToken = undefined;
-  user.passwordResetExpires = undefined;
-  user.refreshToken = undefined;
-  await user.save();
-
-  return user;
-};
-
-const mongoVerifyEmail = async (token) => {
-  const hashedToken = crypto
-    .createHash('sha256')
-    .update(token)
-    .digest('hex');
-
-  const user = await User.findOne({
-    emailVerificationToken: hashedToken,
-    emailVerificationExpires: { $gt: Date.now() },
-  });
-
-  if (!user) {
-    throw ApiError.badRequest('Verification token is invalid or has expired');
-  }
-
-  user.isEmailVerified = true;
-  user.emailVerificationToken = undefined;
-  user.emailVerificationExpires = undefined;
-  await user.save({ validateBeforeSave: false });
-
-  return user;
-};
-
-const mongoResendEmailVerification = async (userId) => {
-  const user = await User.findById(userId);
-  if (!user) {
-    throw ApiError.notFound('User not found');
-  }
-
-  if (user.isEmailVerified) {
-    throw ApiError.badRequest('Email is already verified');
-  }
-
-  const emailVerificationToken = user.createEmailVerificationToken();
-  await user.save({ validateBeforeSave: false });
-
-  return { emailVerificationToken, user };
-};
-
-// ─── Exported Functions with Provider Branching ───
-
-const register = async (data) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.register(data);
-  }
-  return mongoRegister(data);
-};
-
-const login = async (data) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.login(data);
-  }
-  return mongoLogin(data);
-};
-
-const logout = async (userId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.logout(userId);
-  }
-  return mongoLogout(userId);
-};
-
-const refreshToken = async (token) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.refreshToken(token);
-  }
-  return mongoRefreshToken(token);
-};
-
-const getMe = async (userId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.getMe(userId);
-  }
-  return mongoGetMe(userId);
-};
-
-const updateProfile = async (userId, updateData) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.updateProfile(userId, updateData);
-  }
-  return mongoUpdateProfile(userId, updateData);
-};
-
-const changePassword = async (userId, data) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.changePassword(userId, data);
-  }
-  return mongoChangePassword(userId, data);
-};
-
-const forgotPassword = async (email) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.forgotPassword(email);
-  }
-  return mongoForgotPassword(email);
+  return { resetToken, user: mapMysqlUserRow(rows[0]) };
 };
 
 const resetPassword = async (token, newPassword) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.resetPassword(token, newPassword);
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE password_reset_token = ? AND password_reset_expires > NOW() LIMIT 1',
+    [hashedToken],
+  );
+
+  if (rows.length === 0) {
+    throw ApiError.badRequest('Token is invalid or has expired');
   }
-  return mongoResetPassword(token, newPassword);
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  await pool.query(
+    'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL, refresh_token = NULL WHERE id = ?',
+    [passwordHash, rows[0].id],
+  );
+
+  const [updatedRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [rows[0].id],
+  );
+
+  return mapMysqlUserRow(updatedRows[0]);
 };
 
 const verifyEmail = async (token) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.verifyEmail(token);
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE email_verification_token = ? AND email_verification_expires > NOW() LIMIT 1',
+    [hashedToken],
+  );
+
+  if (rows.length === 0) {
+    throw ApiError.badRequest('Verification token is invalid or has expired');
   }
-  return mongoVerifyEmail(token);
+
+  await pool.query(
+    'UPDATE users SET is_email_verified = 1, email_verification_token = NULL, email_verification_expires = NULL WHERE id = ?',
+    [rows[0].id],
+  );
+
+  const [updatedRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [rows[0].id],
+  );
+
+  return mapMysqlUserRow(updatedRows[0]);
 };
 
 const resendEmailVerification = async (userId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLAuthService.resendEmailVerification(userId);
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
+    throw ApiError.notFound('User not found');
   }
-  return mongoResendEmailVerification(userId);
+
+  if (rows[0].is_email_verified) {
+    throw ApiError.badRequest('Email is already verified');
+  }
+
+  const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+  const emailVerificationTokenHash = crypto
+    .createHash('sha256')
+    .update(emailVerificationToken)
+    .digest('hex');
+  const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await pool.query(
+    'UPDATE users SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?',
+    [emailVerificationTokenHash, emailVerificationExpires, userId],
+  );
+
+  return { emailVerificationToken, user: mapMysqlUserRow(rows[0]) };
 };
 
 module.exports = {

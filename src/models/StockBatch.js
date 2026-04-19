@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { Schema } = mongoose;
 const { BATCH_STATUS, GR_STORAGE_CONDITION } = require('../constants');
 
@@ -75,3 +75,4 @@ stockBatchSchema.index({ status: 1, expiryDate: 1 });
 const StockBatch = mongoose.model('StockBatch', stockBatchSchema);
 
 module.exports = StockBatch;
+

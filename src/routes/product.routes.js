@@ -6,7 +6,7 @@ const validate = require('../middlewares/validate');
 const productValidation = require('../validations/product.validation');
 const { USER_ROLES } = require('../constants');
 
-const { SUPERADMIN, ADMIN, APOTEKER, GUDANG } = USER_ROLES;
+const { ADMIN, APOTEKER, GUDANG } = USER_ROLES;
 
 // All product routes require authentication
 router.use(auth);
@@ -14,7 +14,7 @@ router.use(auth);
 // ─── Stats ───
 router.get(
   '/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+  authorize(ADMIN, APOTEKER, GUDANG),
   productController.getProductStats,
 );
 
@@ -22,12 +22,12 @@ router.get(
 router
   .route('/')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+    authorize(ADMIN, APOTEKER, GUDANG),
     validate(productValidation.getProducts),
     productController.getProducts,
   )
   .post(
-    authorize(SUPERADMIN, ADMIN, APOTEKER),
+    authorize(ADMIN, APOTEKER),
     validate(productValidation.createProduct),
     productController.createProduct,
   );
@@ -36,17 +36,17 @@ router
 router
   .route('/:id')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+    authorize(ADMIN, APOTEKER, GUDANG),
     validate(productValidation.productIdParam),
     productController.getProductById,
   )
   .put(
-    authorize(SUPERADMIN, ADMIN, APOTEKER),
+    authorize(ADMIN, APOTEKER),
     validate(productValidation.updateProduct),
     productController.updateProduct,
   )
   .delete(
-    authorize(SUPERADMIN, ADMIN),
+    authorize(ADMIN),
     validate(productValidation.productIdParam),
     productController.deleteProduct,
   );
@@ -54,7 +54,7 @@ router
 // ─── Status ───
 router.patch(
   '/:id/status',
-  authorize(SUPERADMIN, ADMIN, APOTEKER),
+  authorize(ADMIN, APOTEKER),
   validate(productValidation.changeStatus),
   productController.changeStatus,
 );

@@ -4,7 +4,7 @@ const { SUPPLIER_TYPE } = require('../constants');
 const supplierTypes = Object.values(SUPPLIER_TYPE);
 
 const supplierIdParam = [
-  param('id').isMongoId().withMessage('Invalid supplier ID'),
+  param('id').isUUID().withMessage('Invalid supplier ID'),
 ];
 
 const createSupplier = [
@@ -267,3 +267,5 @@ module.exports = {
   changeStatus,
   getSuppliers,
 };
+
+

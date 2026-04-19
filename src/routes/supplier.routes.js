@@ -6,7 +6,7 @@ const validate = require('../middlewares/validate');
 const supplierValidation = require('../validations/supplier.validation');
 const { USER_ROLES } = require('../constants');
 
-const { SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
+const { ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
 
 // All supplier routes require authentication
 router.use(auth);
@@ -14,7 +14,7 @@ router.use(auth);
 // ─── Stats ───
 router.get(
   '/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+  authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
   supplierController.getStats,
 );
 
@@ -22,12 +22,12 @@ router.get(
 router
   .route('/')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+    authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
     validate(supplierValidation.getSuppliers),
     supplierController.getSuppliers,
   )
   .post(
-    authorize(SUPERADMIN, ADMIN, APOTEKER),
+    authorize(ADMIN, APOTEKER),
     validate(supplierValidation.createSupplier),
     supplierController.createSupplier,
   );
@@ -36,17 +36,17 @@ router
 router
   .route('/:id')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+    authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
     validate(supplierValidation.supplierIdParam),
     supplierController.getSupplierById,
   )
   .put(
-    authorize(SUPERADMIN, ADMIN, APOTEKER),
+    authorize(ADMIN, APOTEKER),
     validate(supplierValidation.updateSupplier),
     supplierController.updateSupplier,
   )
   .delete(
-    authorize(SUPERADMIN, ADMIN),
+    authorize(ADMIN),
     validate(supplierValidation.supplierIdParam),
     supplierController.deleteSupplier,
   );
@@ -54,7 +54,7 @@ router
 // ─── Status ───
 router.patch(
   '/:id/status',
-  authorize(SUPERADMIN, ADMIN, APOTEKER),
+  authorize(ADMIN, APOTEKER),
   validate(supplierValidation.changeStatus),
   supplierController.changeStatus,
 );

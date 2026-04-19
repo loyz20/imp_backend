@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const {
   PRODUCT_CATEGORY,
   ALL_GOLONGAN,
@@ -179,3 +179,4 @@ productSchema.statics.findBySku = function (sku) {
 };
 
 module.exports = mongoose.model('Product', productSchema);
+

@@ -15,7 +15,7 @@ const dispositions = Object.values(DISPOSITION);
 const satuanValues = SATUAN;
 
 const returnIdParam = [
-  param('id').isMongoId().withMessage('Invalid return ID'),
+  param('id').isUUID().withMessage('Invalid return ID'),
 ];
 
 const createReturn = [
@@ -31,11 +31,11 @@ const createReturn = [
     .withMessage(`Tipe retur harus salah satu dari: ${returnTypes.join(', ')}`),
     body('customerId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid customer ID'),
   body('supplierId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   body('returnDate')
     .notEmpty()
@@ -59,7 +59,7 @@ const createReturn = [
     .withMessage('Minimal 1 item retur harus ditambahkan'),
   body('items.*.productId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .notEmpty()
@@ -98,7 +98,7 @@ const createReturn = [
 ];
 
 const updateReturn = [
-  param('id').isMongoId().withMessage('Invalid return ID'),
+  param('id').isUUID().withMessage('Invalid return ID'),
   body('returnNumber')
     .optional()
     .trim()
@@ -120,7 +120,7 @@ const updateReturn = [
     .withMessage('Catatan maksimal 1000 karakter'),
   body('supplierId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
 
   // Items (optional on update)
@@ -130,7 +130,7 @@ const updateReturn = [
     .withMessage('Minimal 1 item retur harus ditambahkan'),
   body('items.*.productId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .optional()
@@ -175,7 +175,7 @@ const updateReturn = [
 ];
 
 const changeStatus = [
-  param('id').isMongoId().withMessage('Invalid return ID'),
+  param('id').isUUID().withMessage('Invalid return ID'),
   body('status')
     .notEmpty()
     .withMessage('Status wajib diisi')
@@ -211,11 +211,11 @@ const getReturns = [
     .withMessage(`Tipe retur harus salah satu dari: ${returnTypes.join(', ')}`),
   query('customerId')
     .optional({ values: 'falsy' })
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid customer ID'),
   query('supplierId')
     .optional({ values: 'falsy' })
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   query('dateFrom')
     .optional({ values: 'falsy' })
@@ -237,3 +237,5 @@ module.exports = {
   changeStatus,
   getReturns,
 };
+
+

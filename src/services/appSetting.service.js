@@ -1,32 +1,93 @@
-﻿const AppSetting = require('../models/AppSetting');
 const ApiError = require('../utils/ApiError');
-const { VALID_SECTIONS } = require('../constants');
-const config = require('../config');
+const { VALID_SECTIONS, UPLOAD } = require('../constants');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
+const fs = require('fs/promises');
+const path = require('path');
 
-// ── Helper: Flatten nested object for $set operations ──
-function flattenObject(obj, prefix = '', result = {}) {
-  for (const key of Object.keys(obj)) {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-    const val = obj[key];
+const COMPANY_LOGO_UPLOAD_DIR = path.join(__dirname, '../../uploads/settings');
+const DATA_URL_IMAGE_REGEX = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
+const COMPANY_LOGO_MAX_SIZE = UPLOAD?.MAX_FILE_SIZE || (5 * 1024 * 1024);
 
-    if (
-      val !== null &&
-      val !== undefined &&
-      typeof val === 'object' &&
-      !Array.isArray(val) &&
-      !(val instanceof Date)
-    ) {
-      flattenObject(val, fullKey, result);
-    } else {
-      result[fullKey] = val;
-    }
+const getImageExtensionFromMime = (mimeType = '') => {
+  switch (mimeType.toLowerCase()) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/png':
+      return 'png';
+    case 'image/webp':
+      return 'webp';
+    case 'image/svg+xml':
+      return 'svg';
+    default:
+      return 'bin';
   }
-  return result;
-}
+};
 
-// ── Helper: deep merge (target ← source) ──
+const isLocalCompanyLogoPath = (logoPath) => {
+  if (typeof logoPath !== 'string') return false;
+  return logoPath.startsWith('/uploads/settings/') || logoPath.startsWith('uploads/settings/');
+};
+
+const removeLocalCompanyLogo = async (logoPath) => {
+  if (!isLocalCompanyLogoPath(logoPath)) return;
+  const normalized = logoPath.replace(/^\/+/, '');
+  const fsPath = path.join(__dirname, '../../', normalized.replaceAll('/', path.sep));
+  try {
+    await fs.unlink(fsPath);
+  } catch {
+    // ignore when file already missing
+  }
+};
+
+const saveCompanyLogoFromDataUrl = async (logoDataUrl) => {
+  const trimmed = logoDataUrl.trim();
+  const match = trimmed.match(DATA_URL_IMAGE_REGEX);
+  if (!match) {
+    throw ApiError.badRequest('Format logo tidak valid');
+  }
+
+  const mimeType = match[1].toLowerCase();
+  const base64Payload = match[2];
+  const imageBuffer = Buffer.from(base64Payload, 'base64');
+
+  if (!imageBuffer.length) {
+    throw ApiError.badRequest('File logo tidak valid');
+  }
+
+  if (imageBuffer.length > COMPANY_LOGO_MAX_SIZE) {
+    throw ApiError.badRequest('Ukuran logo melebihi batas maksimal 5 MB');
+  }
+
+  await fs.mkdir(COMPANY_LOGO_UPLOAD_DIR, { recursive: true });
+  const ext = getImageExtensionFromMime(mimeType);
+  const fileName = `company-logo-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
+  const fullPath = path.join(COMPANY_LOGO_UPLOAD_DIR, fileName);
+
+  await fs.writeFile(fullPath, imageBuffer);
+  return `/uploads/settings/${fileName}`;
+};
+
+const normalizeCompanyLogoForStorage = async (settings) => {
+  if (!settings?.company || typeof settings.company !== 'object') {
+    return settings;
+  }
+
+  const logo = settings.company.logo;
+  if (typeof logo !== 'string') {
+    return settings;
+  }
+
+  const trimmedLogo = logo.trim();
+  if (!trimmedLogo.startsWith('data:image/')) {
+    settings.company.logo = trimmedLogo || null;
+    return settings;
+  }
+
+  settings.company.logo = await saveCompanyLogoFromDataUrl(trimmedLogo);
+  return settings;
+};
+
 function deepMerge(target, source) {
   for (const key of Object.keys(source)) {
     const sv = source[key];
@@ -42,205 +103,6 @@ function deepMerge(target, source) {
   }
   return target;
 }
-
-// ── Helper: set nested value by dotted path ──
-function setNestedValue(obj, path, value) {
-  const keys = path.split('.');
-  let cur = obj;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!cur[keys[i]] || typeof cur[keys[i]] !== 'object') cur[keys[i]] = {};
-    cur = cur[keys[i]];
-  }
-  cur[keys[keys.length - 1]] = value;
-}
-
-// ── Mongo Helper: ensure settings exist ──
-async function ensureSettings() {
-  const settings = await AppSetting.findOne();
-  if (!settings) {
-    throw ApiError.notFound('Settings belum di-initialize. Jalankan POST /settings/initialize terlebih dahulu.');
-  }
-  return settings;
-}
-
-function getSanitizedSection(settings, section) {
-  const serialized = settings.toJSON();
-  return serialized[section];
-}
-
-// ─── Mongo Implementations ───
-
-const mongoGetSettings = async () => {
-  return ensureSettings();
-};
-
-const mongoGetSection = async (section) => {
-  if (!VALID_SECTIONS.includes(section)) {
-    throw ApiError.badRequest(`Section '${section}' tidak valid`);
-  }
-  const settings = await ensureSettings();
-  const data = settings.toJSON();
-  if (data[section] === undefined) {
-    throw ApiError.notFound(`Section '${section}' tidak ditemukan`);
-  }
-  return data[section];
-};
-
-const mongoInitializeSettings = async () => {
-  const existing = await AppSetting.findOne();
-  if (existing) {
-    throw ApiError.conflict('Settings sudah diinisialisasi');
-  }
-  const settings = await AppSetting.create({});
-  return settings;
-};
-
-const mongoUpdateAll = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data);
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return settings;
-};
-
-const mongoUpdateCompany = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, 'company');
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, 'company');
-};
-
-const mongoUpdateLicenses = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, 'company.licenses');
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, 'company').licenses;
-};
-
-const mongoUpdatePharmacist = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, 'company.responsiblePharmacist');
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, 'company').responsiblePharmacist;
-};
-
-const mongoUpdatePharmacistObat = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, 'company.pharmacistObat');
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, 'company').pharmacistObat;
-};
-
-const mongoUpdatePharmacistAlkes = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, 'company.pharmacistAlkes');
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, 'company').pharmacistAlkes;
-};
-
-const mongoUpdateTax = async (data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, 'company.tax');
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, 'company').tax;
-};
-
-const mongoUpdateDocSection = async (section, data) => {
-  await ensureSettings();
-  const flattened = flattenObject(data, section);
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: flattened },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, section);
-};
-
-const mongoUpdateOperationalSection = async (section, data) => {
-  await ensureSettings();
-  const setData = {};
-  for (const [key, val] of Object.entries(data)) {
-    if (Array.isArray(val)) {
-      setData[`${section}.${key}`] = val;
-    } else if (val !== null && val !== undefined && typeof val === 'object' && !(val instanceof Date)) {
-      const sub = flattenObject(val, `${section}.${key}`);
-      Object.assign(setData, sub);
-    } else {
-      setData[`${section}.${key}`] = val;
-    }
-  }
-  const settings = await AppSetting.findOneAndUpdate(
-    {},
-    { $set: setData },
-    { new: true, runValidators: true }
-  );
-  return getSanitizedSection(settings, section);
-};
-
-const mongoGenerateDocNumber = async (type) => {
-  await ensureSettings();
-  const result = await AppSetting.generateDocNumber(type);
-  if (!result) {
-    throw ApiError.badRequest(`Auto-number tidak aktif untuk ${type}`);
-  }
-  return result;
-};
-
-const mongoResetDocNumber = async (type) => {
-  const settings = await ensureSettings();
-  if (!settings[type]) {
-    throw ApiError.badRequest(`Tipe dokumen '${type}' tidak valid`);
-  }
-  await AppSetting.findOneAndUpdate(
-    {},
-    { $set: { [`documentCounters.${type}.current`]: 0, [`documentCounters.${type}.lastReset`]: new Date() } }
-  );
-  return { message: `Counter ${type} berhasil di-reset` };
-};
-
-const mongoGetLicenseWarnings = async () => {
-  const settings = await AppSetting.findOne();
-  if (!settings) return [];
-  return settings.getLicenseWarnings();
-};
-
-const mongoTestSmtp = async () => {
-  const settings = await ensureSettings();
-  const smtp = settings.notification?.smtp;
-  if (!smtp?.host || !smtp?.port) {
-    throw ApiError.badRequest('SMTP belum dikonfigurasi');
-  }
-  return { message: 'SMTP configuration is valid (test mode)' };
-};
-
-// ─── MySQL Helpers ───
 
 const SETTINGS_KEY = 'main';
 
@@ -304,11 +166,10 @@ const mysqlEnsureSettings = async () => {
 
 const mysqlSaveSettings = async (settings) => {
   const pool = getMySQLPool();
-  await pool.query('UPDATE app_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?', [JSON.stringify(settings), SETTINGS_KEY]);
-  return settings;
+  const normalizedSettings = await normalizeCompanyLogoForStorage(settings);
+  await pool.query('UPDATE app_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?', [JSON.stringify(normalizedSettings), SETTINGS_KEY]);
+  return normalizedSettings;
 };
-
-// ─── MySQL Implementations ───
 
 const mysqlGetSettings = async () => {
   const raw = await mysqlEnsureSettings();
@@ -328,7 +189,7 @@ const mysqlInitializeSettings = async () => {
   if (!pool) throw ApiError.internal('MySQL pool not initialized');
   const existing = await mysqlGetRaw();
   if (existing) throw ApiError.conflict('Settings sudah diinisialisasi');
-  const id = new mongoose.Types.ObjectId().toString();
+  const id = randomUUID();
   await pool.query('INSERT INTO app_settings (id, setting_key, setting_value, created_at, updated_at) VALUES (?,?,?,NOW(),NOW())', [id, SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS)]);
   return mysqlSanitize(DEFAULT_SETTINGS);
 };
@@ -349,7 +210,25 @@ const mysqlUpdateSection = async (section, data) => {
   return sanitized[section];
 };
 
-const mysqlUpdateCompany = (data) => mysqlUpdateSection('company', data);
+const mysqlUpdateCompany = async (data) => {
+  const raw = await mysqlEnsureSettings();
+  if (!raw.company) raw.company = {};
+
+  const previousLogo = raw.company.logo;
+  deepMerge(raw.company, data);
+
+  await mysqlSaveSettings(raw);
+
+  if (
+    Object.prototype.hasOwnProperty.call(data, 'logo') &&
+    previousLogo &&
+    previousLogo !== raw.company.logo
+  ) {
+    await removeLocalCompanyLogo(previousLogo);
+  }
+
+  return mysqlSanitize(raw).company;
+};
 
 const mysqlUpdateLicenses = async (data) => {
   const raw = await mysqlEnsureSettings();
@@ -428,28 +307,40 @@ const mysqlGetLicenseWarnings = async () => {
   const warnings = [];
   const today = new Date();
   const threshold = 30;
+
   const checkLicense = (name, license) => {
     if (!license?.expiryDate) return;
     const expiry = new Date(license.expiryDate);
     const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
     if (daysUntilExpiry <= threshold) {
-      warnings.push({ license: name, number: license.number || '-', expiryDate: license.expiryDate, status: daysUntilExpiry < 0 ? 'expired' : 'expiring_soon', daysUntilExpiry });
+      warnings.push({
+        license: name,
+        number: license.number || '-',
+        expiryDate: license.expiryDate,
+        status: daysUntilExpiry < 0 ? 'expired' : 'expiring_soon',
+        daysUntilExpiry,
+      });
     }
   };
+
   const lic = raw.company?.licenses;
   checkLicense('PBF', lic?.pbf);
   checkLicense('SIUP', lic?.siup);
   checkLicense('TDP', lic?.tdp);
   checkLicense('CDOB', lic?.cdob);
+
   const pharm = raw.company?.responsiblePharmacist;
   if (pharm?.sipaExpiry) checkLicense('SIPA', { number: pharm.sipaNumber, expiryDate: pharm.sipaExpiry });
   if (pharm?.straExpiry) checkLicense('STRA', { number: pharm.straNumber, expiryDate: pharm.straExpiry });
+
   const pharmObat = raw.company?.pharmacistObat;
   if (pharmObat?.sipaExpiry) checkLicense('SIPA (Obat)', { number: pharmObat.sipaNumber, expiryDate: pharmObat.sipaExpiry });
   if (pharmObat?.straExpiry) checkLicense('STRA (Obat)', { number: pharmObat.straNumber, expiryDate: pharmObat.straExpiry });
+
   const pharmAlkes = raw.company?.pharmacistAlkes;
   if (pharmAlkes?.sipaExpiry) checkLicense('SIPA (Alkes)', { number: pharmAlkes.sipaNumber, expiryDate: pharmAlkes.sipaExpiry });
   if (pharmAlkes?.straExpiry) checkLicense('STRA (Alkes)', { number: pharmAlkes.straNumber, expiryDate: pharmAlkes.straExpiry });
+
   warnings.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
   return warnings;
 };
@@ -461,36 +352,32 @@ const mysqlTestSmtp = async () => {
   return { message: 'SMTP configuration is valid (test mode)' };
 };
 
-// ─── Exported Functions with Provider Branching ───
-
-const isMysql = () => config.dbProvider === 'mysql';
-
-const getSettings = () => isMysql() ? mysqlGetSettings() : mongoGetSettings();
-const getSection = (section) => isMysql() ? mysqlGetSection(section) : mongoGetSection(section);
-const initializeSettings = () => isMysql() ? mysqlInitializeSettings() : mongoInitializeSettings();
-const updateAll = (data) => isMysql() ? mysqlUpdateAll(data) : mongoUpdateAll(data);
-const updateCompany = (data) => isMysql() ? mysqlUpdateCompany(data) : mongoUpdateCompany(data);
-const updateLicenses = (data) => isMysql() ? mysqlUpdateLicenses(data) : mongoUpdateLicenses(data);
-const updatePharmacist = (data) => isMysql() ? mysqlUpdatePharmacist(data) : mongoUpdatePharmacist(data);
-const updatePharmacistObat = (data) => isMysql() ? mysqlUpdatePharmacistObat(data) : mongoUpdatePharmacistObat(data);
-const updatePharmacistAlkes = (data) => isMysql() ? mysqlUpdatePharmacistAlkes(data) : mongoUpdatePharmacistAlkes(data);
-const updateTax = (data) => isMysql() ? mysqlUpdateTax(data) : mongoUpdateTax(data);
-const updateInvoice = (data) => isMysql() ? mysqlUpdateSection('invoice', data) : mongoUpdateDocSection('invoice', data);
-const updatePurchaseOrder = (data) => isMysql() ? mysqlUpdateSection('purchaseOrder', data) : mongoUpdateDocSection('purchaseOrder', data);
-const updateDeliveryOrder = (data) => isMysql() ? mysqlUpdateSection('deliveryOrder', data) : mongoUpdateDocSection('deliveryOrder', data);
-const updateReturnOrder = (data) => isMysql() ? mysqlUpdateSection('returnOrder', data) : mongoUpdateDocSection('returnOrder', data);
-const updateInventory = (data) => isMysql() ? mysqlUpdateSection('inventory', data) : mongoUpdateOperationalSection('inventory', data);
-const updateCdob = (data) => isMysql() ? mysqlUpdateSection('cdob', data) : mongoUpdateOperationalSection('cdob', data);
-const updateMedication = (data) => isMysql() ? mysqlUpdateSection('medication', data) : mongoUpdateOperationalSection('medication', data);
-const updateCustomer = (data) => isMysql() ? mysqlUpdateSection('customer', data) : mongoUpdateOperationalSection('customer', data);
-const updatePayment = (data) => isMysql() ? mysqlUpdateSection('payment', data) : mongoUpdateOperationalSection('payment', data);
-const updateNotification = (data) => isMysql() ? mysqlUpdateSection('notification', data) : mongoUpdateOperationalSection('notification', data);
-const updateReporting = (data) => isMysql() ? mysqlUpdateSection('reporting', data) : mongoUpdateOperationalSection('reporting', data);
-const updateGeneral = (data) => isMysql() ? mysqlUpdateSection('general', data) : mongoUpdateOperationalSection('general', data);
-const generateDocNumber = (type) => isMysql() ? mysqlGenerateDocNumber(type) : mongoGenerateDocNumber(type);
-const resetDocNumber = (type) => isMysql() ? mysqlResetDocNumber(type) : mongoResetDocNumber(type);
-const getLicenseWarnings = () => isMysql() ? mysqlGetLicenseWarnings() : mongoGetLicenseWarnings();
-const testSmtp = (testEmail) => isMysql() ? mysqlTestSmtp(testEmail) : mongoTestSmtp(testEmail);
+const getSettings = () => mysqlGetSettings();
+const getSection = (section) => mysqlGetSection(section);
+const initializeSettings = () => mysqlInitializeSettings();
+const updateAll = (data) => mysqlUpdateAll(data);
+const updateCompany = (data) => mysqlUpdateCompany(data);
+const updateLicenses = (data) => mysqlUpdateLicenses(data);
+const updatePharmacist = (data) => mysqlUpdatePharmacist(data);
+const updatePharmacistObat = (data) => mysqlUpdatePharmacistObat(data);
+const updatePharmacistAlkes = (data) => mysqlUpdatePharmacistAlkes(data);
+const updateTax = (data) => mysqlUpdateTax(data);
+const updateInvoice = (data) => mysqlUpdateSection('invoice', data);
+const updatePurchaseOrder = (data) => mysqlUpdateSection('purchaseOrder', data);
+const updateDeliveryOrder = (data) => mysqlUpdateSection('deliveryOrder', data);
+const updateReturnOrder = (data) => mysqlUpdateSection('returnOrder', data);
+const updateInventory = (data) => mysqlUpdateSection('inventory', data);
+const updateCdob = (data) => mysqlUpdateSection('cdob', data);
+const updateMedication = (data) => mysqlUpdateSection('medication', data);
+const updateCustomer = (data) => mysqlUpdateSection('customer', data);
+const updatePayment = (data) => mysqlUpdateSection('payment', data);
+const updateNotification = (data) => mysqlUpdateSection('notification', data);
+const updateReporting = (data) => mysqlUpdateSection('reporting', data);
+const updateGeneral = (data) => mysqlUpdateSection('general', data);
+const generateDocNumber = (type) => mysqlGenerateDocNumber(type);
+const resetDocNumber = (type) => mysqlResetDocNumber(type);
+const getLicenseWarnings = () => mysqlGetLicenseWarnings();
+const testSmtp = () => mysqlTestSmtp();
 
 module.exports = {
   getSettings,

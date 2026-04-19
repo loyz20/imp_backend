@@ -6,8 +6,8 @@ const validate = require('../middlewares/validate');
 const invValidation = require('../validations/inventory.validation');
 const { USER_ROLES } = require('../constants');
 
-const { SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
-const allRoles = [SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES];
+const { ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
+const allRoles = [ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES];
 
 // All routes require authentication
 router.use(auth);
@@ -55,7 +55,7 @@ router.get(
 
 router.post(
   '/mutations',
-  authorize(SUPERADMIN, ADMIN, GUDANG),
+  authorize(ADMIN, GUDANG),
   validate(invValidation.createMutation),
   inventoryController.createMutation,
 );
@@ -79,7 +79,7 @@ router.get(
 
 router.post(
   '/opname',
-  authorize(SUPERADMIN, ADMIN, GUDANG),
+  authorize(ADMIN, GUDANG),
   validate(invValidation.createOpname),
   inventoryController.createOpname,
 );
@@ -93,14 +93,14 @@ router.get(
 
 router.put(
   '/opname/:id',
-  authorize(SUPERADMIN, ADMIN, GUDANG),
+  authorize(ADMIN, GUDANG),
   validate(invValidation.updateOpname),
   inventoryController.updateOpname,
 );
 
 router.patch(
   '/opname/:id/finalize',
-  authorize(SUPERADMIN, ADMIN),
+  authorize(ADMIN),
   validate(invValidation.finalizeOpname),
   inventoryController.finalizeOpname,
 );

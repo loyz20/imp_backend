@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { JOURNAL_SOURCE, JOURNAL_STATUS } = require('../constants');
 
 const journalLineSchema = new mongoose.Schema({
@@ -147,3 +147,4 @@ journalEntrySchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('JournalEntry', journalEntrySchema);
+

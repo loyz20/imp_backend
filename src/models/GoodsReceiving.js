@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { GR_STATUS, GR_CONDITION_STATUS, GR_STORAGE_CONDITION, SATUAN } = require('../constants');
 
 const grItemSchema = new mongoose.Schema({
@@ -167,3 +167,4 @@ goodsReceivingSchema.index(
 );
 
 module.exports = mongoose.model('GoodsReceiving', goodsReceivingSchema);
+

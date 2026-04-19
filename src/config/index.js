@@ -1,16 +1,12 @@
 const dotenv = require('dotenv');
 const path = require('path');
 
-dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
 
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT, 10) || 5000,
-  dbProvider: process.env.DB_PROVIDER || 'mongo',
-
-  mongo: {
-    uri: process.env.MONGO_URI || 'mongodb://localhost:27017/app-iko',
-  },
+  dbProvider: 'mysql',
 
   mysql: {
     host: process.env.MYSQL_HOST || 'localhost',

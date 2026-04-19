@@ -9,7 +9,7 @@ const {
 } = require('../constants');
 
 const productIdParam = [
-  param('id').isMongoId().withMessage('Invalid product ID format'),
+  param('id').isUUID().withMessage('Invalid product ID format'),
 ];
 
 const getProducts = [
@@ -256,3 +256,5 @@ module.exports = {
   changeStatus,
   productIdParam,
 };
+
+

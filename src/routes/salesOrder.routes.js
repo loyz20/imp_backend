@@ -6,7 +6,7 @@ const validate = require('../middlewares/validate');
 const soValidation = require('../validations/salesOrder.validation');
 const { USER_ROLES } = require('../constants');
 
-const { SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
+const { ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
 
 // All routes require authentication
 router.use(auth);
@@ -68,7 +68,7 @@ router.use(auth);
  */
 router.get(
   '/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+  authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
   soController.getStats,
 );
 
@@ -76,12 +76,12 @@ router.get(
 router
   .route('/')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+    authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
     validate(soValidation.getSalesOrders),
     soController.getSalesOrders,
   )
   .post(
-    authorize(SUPERADMIN, ADMIN, SALES),
+    authorize(ADMIN, SALES),
     validate(soValidation.createSalesOrder),
     soController.createSalesOrder,
   );
@@ -89,7 +89,7 @@ router
 // ─── Generate Invoice from multiple Surat Jalan ───
 router.post(
   '/generate-invoice',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN, SALES),
+  authorize(ADMIN, KEUANGAN, SALES),
   validate(soValidation.generateInvoice),
   soController.generateInvoice,
 );
@@ -98,17 +98,17 @@ router.post(
 router
   .route('/:id')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+    authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
     validate(soValidation.soIdParam),
     soController.getSalesOrderById,
   )
   .put(
-    authorize(SUPERADMIN, ADMIN, SALES),
+    authorize(ADMIN, SALES),
     validate(soValidation.updateSalesOrder),
     soController.updateSalesOrder,
   )
   .delete(
-    authorize(SUPERADMIN, ADMIN),
+    authorize(ADMIN),
     validate(soValidation.soIdParam),
     soController.deleteSalesOrder,
   );
@@ -116,7 +116,7 @@ router
 // ─── Change Status ───
 router.patch(
   '/:id/status',
-  authorize(SUPERADMIN, ADMIN, SALES),
+  authorize(ADMIN, SALES),
   validate(soValidation.changeStatus),
   soController.changeStatus,
 );

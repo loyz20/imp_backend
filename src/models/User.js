@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { USER_ROLES } = require('../constants');
@@ -40,7 +40,7 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: Object.values(USER_ROLES),
-      default: USER_ROLES.USER,
+      default: USER_ROLES.SALES,
       index: true,
     },
     isActive: {
@@ -214,3 +214,4 @@ userSchema.statics.findActiveUsers = function () {
 };
 
 module.exports = mongoose.model('User', userSchema);
+

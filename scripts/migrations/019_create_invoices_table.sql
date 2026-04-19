@@ -1,0 +1,38 @@
+-- core table migration
+-- table: invoices
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id VARCHAR(36) NOT NULL,
+  invoice_number VARCHAR(100) NULL,
+  invoice_type VARCHAR(50) NOT NULL DEFAULT 'sales',
+  invoice_category VARCHAR(50) NULL,
+  sales_order_id VARCHAR(36) NULL,
+  purchase_order_id VARCHAR(36) NULL,
+  goods_receiving_id VARCHAR(36) NULL,
+  customer_id VARCHAR(36) NULL,
+  supplier_id VARCHAR(36) NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'draft',
+  invoice_date DATETIME NOT NULL,
+  sent_at DATETIME NULL,
+  due_date DATETIME NULL,
+  subtotal DECIMAL(18,2) NOT NULL DEFAULT 0,
+  ppn_rate DECIMAL(5,2) NOT NULL DEFAULT 0,
+  ppn_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+  discount DECIMAL(18,2) NOT NULL DEFAULT 0,
+  total_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+  paid_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+  remaining_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+  payment_term_days INT NOT NULL DEFAULT 30,
+  notes TEXT NULL,
+  paid_at DATETIME NULL,
+  created_by VARCHAR(36) NULL,
+  updated_by VARCHAR(36) NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_invoices_number (invoice_number),
+  KEY idx_invoices_type (invoice_type),
+  KEY idx_invoices_status (status),
+  KEY idx_invoices_customer (customer_id),
+  KEY idx_invoices_supplier (supplier_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

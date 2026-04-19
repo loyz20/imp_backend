@@ -2,7 +2,7 @@ const { body, param, query } = require('express-validator');
 const { CUSTOMER_TYPES } = require('../constants');
 
 const customerIdParam = [
-  param('id').isMongoId().withMessage('Invalid customer ID'),
+  param('id').isUUID().withMessage('Invalid customer ID'),
 ];
 
 const createCustomer = [
@@ -45,6 +45,16 @@ const createCustomer = [
     .withMessage('Phone must be max 30 characters')
     .matches(/^[0-9+\-\s()]*$/)
     .withMessage('Phone must contain only numbers, +, -, spaces, and parentheses'),
+  body('eReportCode')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('E-Report code must be max 100 characters'),
+  body('bpomCode')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('BPOM code must be max 100 characters'),
   body('address.street')
     .optional()
     .trim()
@@ -173,6 +183,16 @@ const updateCustomer = [
     .withMessage('Phone must be max 30 characters')
     .matches(/^[0-9+\-\s()]*$/)
     .withMessage('Phone must contain only numbers, +, -, spaces, and parentheses'),
+  body('eReportCode')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('E-Report code must be max 100 characters'),
+  body('bpomCode')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('BPOM code must be max 100 characters'),
   body('address.street')
     .optional()
     .trim()
@@ -315,3 +335,5 @@ module.exports = {
   changeStatus,
   getCustomers,
 };
+
+

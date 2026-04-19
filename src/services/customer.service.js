@@ -1,11 +1,7 @@
-const Customer = require('../models/Customer');
-const AppSetting = require('../models/AppSetting');
 const ApiError = require('../utils/ApiError');
-const { paginate } = require('../helpers');
 const { CUSTOMER_TYPE } = require('../constants');
-const config = require('../config');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 
 const customerTypes = Object.values(CUSTOMER_TYPE);
 
@@ -23,6 +19,8 @@ const mapCustomerRow = (row) => {
     ownerAddress: row.owner_address,
     contactPerson: row.contact_person,
     phone: row.phone,
+    eReportCode: row.e_report_code,
+    bpomCode: row.bpom_code,
     address: {
       street: row.address_street,
       city: row.address_city,
@@ -86,9 +84,9 @@ const mysqlGetCustomers = async (queryParams) => {
   const params = [];
 
   if (search) {
-    whereClauses.push('(c.name LIKE ? OR c.code LIKE ? OR c.phone LIKE ?)');
+    whereClauses.push('(c.name LIKE ? OR c.code LIKE ? OR c.phone LIKE ? OR c.e_report_code LIKE ? OR c.bpom_code LIKE ?)');
     const s = `%${search}%`;
-    params.push(s, s, s);
+    params.push(s, s, s, s, s);
   }
   if (type) { whereClauses.push('c.type = ?'); params.push(type); }
   if (city) { whereClauses.push('c.address_city LIKE ?'); params.push(`%${city}%`); }
@@ -193,30 +191,34 @@ const mysqlCreateCustomer = async (data, userId) => {
     if (codeRow) throw ApiError.conflict('Customer dengan kode tersebut sudah ada');
   }
 
-  const id = new mongoose.Types.ObjectId().toString();
+  const id = randomUUID();
   const code = data.code || await generateCustomerCode(pool);
 
   await pool.query(
     `INSERT INTO customers (
       id, code, name, type, owner_name, owner_address, contact_person, phone,
+      e_report_code, bpom_code,
       address_street, address_city, address_province,
       izin_sarana_number, izin_sarana_expiry_date,
       apoteker_name, apoteker_address, sipa_number, sipa_expiry_date,
       payment_term_days, credit_limit, bank_name, bank_account_number, bank_account_name,
       npwp_number, npwp_name, npwp_address,
       notes, is_active, created_by, updated_by, created_at, updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,NOW(),NOW())`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,NOW(),NOW())`,
     [
       id, code, data.name, data.type,
       data.ownerName || null, data.ownerAddress || null,
       data.contactPerson || null, data.phone || null,
+      data.eReportCode || null, data.bpomCode || null,
       data.address?.street || null, data.address?.city || null, data.address?.province || null,
       data.izinSarana?.number || null, data.izinSarana?.expiryDate || null,
       data.apoteker?.name || null, data.apoteker?.address || null,
       data.sipa?.number || null, data.sipa?.expiryDate || null,
       data.paymentTermDays ?? 30, data.creditLimit ?? 50000000,
       data.bankAccount?.bankName || null, data.bankAccount?.accountNumber || null, data.bankAccount?.accountName || null,
-      data.npwp?.number || null, data.npwp?.name || null, data.npwp?.address || null,
+      data.npwp?.number ?? data.npwp ?? null,
+      data.npwp?.name ?? data.npwpName ?? null,
+      data.npwp?.address ?? data.npwpAddress ?? null,
       data.notes || null,
       userId, userId,
     ],
@@ -245,6 +247,7 @@ const mysqlUpdateCustomer = async (id, data, userId) => {
     name: 'name', code: 'code', type: 'type',
     ownerName: 'owner_name', ownerAddress: 'owner_address',
     contactPerson: 'contact_person', phone: 'phone',
+    eReportCode: 'e_report_code', bpomCode: 'bpom_code',
     paymentTermDays: 'payment_term_days', creditLimit: 'credit_limit',
     notes: 'notes',
   };
@@ -272,10 +275,16 @@ const mysqlUpdateCustomer = async (id, data, userId) => {
     if (data.sipa.number !== undefined) { setClauses.push('sipa_number = ?'); values.push(data.sipa.number); }
     if (data.sipa.expiryDate !== undefined) { setClauses.push('sipa_expiry_date = ?'); values.push(data.sipa.expiryDate); }
   }
-  if (data.npwp) {
-    if (data.npwp.number !== undefined) { setClauses.push('npwp_number = ?'); values.push(data.npwp.number); }
-    if (data.npwp.name !== undefined) { setClauses.push('npwp_name = ?'); values.push(data.npwp.name); }
-    if (data.npwp.address !== undefined) { setClauses.push('npwp_address = ?'); values.push(data.npwp.address); }
+  const hasNpwpNested = typeof data.npwp === 'object' && data.npwp !== null;
+  const hasNpwpFlat = data.npwp !== undefined || data.npwpName !== undefined || data.npwpAddress !== undefined;
+  if (hasNpwpNested || hasNpwpFlat) {
+    const npwpNumber = hasNpwpNested ? data.npwp.number : data.npwp;
+    const npwpName = hasNpwpNested ? data.npwp.name : data.npwpName;
+    const npwpAddress = hasNpwpNested ? data.npwp.address : data.npwpAddress;
+
+    if (npwpNumber !== undefined) { setClauses.push('npwp_number = ?'); values.push(npwpNumber); }
+    if (npwpName !== undefined) { setClauses.push('npwp_name = ?'); values.push(npwpName); }
+    if (npwpAddress !== undefined) { setClauses.push('npwp_address = ?'); values.push(npwpAddress); }
   }
   if (data.bankAccount) {
     if (data.bankAccount.bankName !== undefined) { setClauses.push('bank_name = ?'); values.push(data.bankAccount.bankName); }
@@ -309,175 +318,13 @@ const mysqlChangeStatus = async (id, isActive, userId) => {
   return mysqlGetCustomerById(id);
 };
 
-// ─── Mongo Implementations ───
-
-const mongoGetCustomers = async (queryParams) => {
-  const { page, limit, search, type, city, isActive, sort } = queryParams;
-
-  const filter = {};
-
-  if (search) {
-    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [
-      { name: { $regex: escaped, $options: 'i' } },
-      { code: { $regex: escaped, $options: 'i' } },
-      { contactPerson: { $regex: escaped, $options: 'i' } },
-      { phone: { $regex: escaped, $options: 'i' } },
-    ];
-  }
-
-  if (type) filter.type = type;
-  if (city) filter['address.city'] = { $regex: city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-  if (typeof isActive !== 'undefined' && isActive !== '') {
-    filter.isActive = isActive === 'true' || isActive === true;
-  }
-
-  return paginate(Customer, { filter, page, limit, sort: sort || '-createdAt' });
-};
-
-const mongoGetStats = async () => {
-  const now = new Date();
-  const ninetyDaysFromNow = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-
-  const [total, active, inactive, typeCounts, expiredSIA, nearExpirySIA, cityCounts] = await Promise.all([
-    Customer.countDocuments(),
-    Customer.countDocuments({ isActive: true }),
-    Customer.countDocuments({ isActive: false }),
-    Customer.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }]),
-    Customer.countDocuments({ 'izinSarana.expiryDate': { $lt: now, $ne: null } }),
-    Customer.countDocuments({ 'izinSarana.expiryDate': { $gte: now, $lte: ninetyDaysFromNow } }),
-    Customer.aggregate([
-      { $match: { 'address.city': { $ne: null, $ne: '' } } },
-      { $group: { _id: '$address.city', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]),
-  ]);
-
-  const typeKeyMap = {
-    apotek: 'apotek', rumah_sakit: 'rumahSakit', klinik: 'klinik',
-    puskesmas: 'puskesmas', toko_obat: 'tokoObat', pbf_lain: 'pbfLain',
-  };
-  const typeStats = {};
-  for (const t of customerTypes) { typeStats[typeKeyMap[t] || t] = 0; }
-  for (const tc of typeCounts) {
-    if (tc._id && typeKeyMap[tc._id]) typeStats[typeKeyMap[tc._id]] = tc.count;
-  }
-  const byCity = {};
-  let otherCount = 0;
-  cityCounts.forEach((c, i) => { if (i < 7) byCity[c._id] = c.count; else otherCount += c.count; });
-  if (otherCount > 0) byCity['Lainnya'] = otherCount;
-
-  return { total, active, inactive, ...typeStats, expiredSIA, nearExpirySIA, overCreditLimit: 0, byCity };
-};
-
-const mongoGetCustomerById = async (id) => {
-  const customer = await Customer.findById(id).populate('createdBy', 'name').populate('updatedBy', 'name');
-  if (!customer) throw ApiError.notFound('Customer tidak ditemukan');
-  const customerObj = customer.toJSON();
-  customerObj.transactionSummary = { totalSalesOrders: 0, totalTransactionValue: 0, lastOrderDate: null, outstandingReceivable: 0, creditUtilization: 0 };
-  return customerObj;
-};
-
-const mongoCreateCustomer = async (data, userId) => {
-  const settings = await AppSetting.getSettings();
-  if (settings?.customer?.customerTypes?.length) {
-    if (!settings.customer.customerTypes.includes(data.type)) throw ApiError.badRequest(`Tipe pelanggan '${data.type}' tidak diizinkan`);
-  }
-  if (settings?.customer?.requireSIA && !data.izinSarana?.number) throw ApiError.badRequest('Nomor Izin Sarana wajib diisi (sesuai pengaturan)');
-
-  const existingName = await Customer.findOne({ name: { $regex: `^${data.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
-  if (existingName) throw ApiError.conflict('Customer dengan nama tersebut sudah ada');
-  if (data.code) {
-    const existingCode = await Customer.findOne({ code: data.code });
-    if (existingCode) throw ApiError.conflict('Customer dengan kode tersebut sudah ada');
-  }
-  if ((data.creditLimit === undefined || data.creditLimit === null) && settings?.customer?.defaultCreditLimit !== undefined) {
-    data.creditLimit = settings.customer.defaultCreditLimit;
-  }
-  data.createdBy = userId;
-  data.updatedBy = userId;
-  return Customer.create(data);
-};
-
-const mongoUpdateCustomer = async (id, data, userId) => {
-  const customer = await Customer.findById(id);
-  if (!customer) throw ApiError.notFound('Customer tidak ditemukan');
-
-  if (data.type) {
-    const settings = await AppSetting.getSettings();
-    if (settings?.customer?.customerTypes?.length && !settings.customer.customerTypes.includes(data.type)) {
-      throw ApiError.badRequest(`Tipe pelanggan '${data.type}' tidak diizinkan`);
-    }
-    if (settings?.customer?.requireSIA) {
-      const izinNumber = data.izinSarana?.number ?? customer.izinSarana?.number;
-      if (!izinNumber) throw ApiError.badRequest('Nomor Izin Sarana wajib diisi (sesuai pengaturan)');
-    }
-  }
-  if (data.name) {
-    const existingName = await Customer.findOne({ _id: { $ne: id }, name: { $regex: `^${data.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
-    if (existingName) throw ApiError.conflict('Customer dengan nama tersebut sudah ada');
-  }
-  if (data.code) {
-    const existingCode = await Customer.findOne({ _id: { $ne: id }, code: data.code });
-    if (existingCode) throw ApiError.conflict('Customer dengan kode tersebut sudah ada');
-  }
-  data.updatedBy = userId;
-  Object.assign(customer, data);
-  await customer.save();
-  return customer;
-};
-
-const mongoDeleteCustomer = async (id) => {
-  const customer = await Customer.findById(id);
-  if (!customer) throw ApiError.notFound('Customer tidak ditemukan');
-  await customer.deleteOne();
-};
-
-const mongoChangeStatus = async (id, isActive, userId) => {
-  const customer = await Customer.findById(id);
-  if (!customer) throw ApiError.notFound('Customer tidak ditemukan');
-  customer.isActive = isActive;
-  customer.updatedBy = userId;
-  await customer.save();
-  return customer;
-};
-
-// ─── Exported Functions with Provider Branching ───
-
-const getCustomers = async (queryParams) => {
-  if (config.dbProvider === 'mysql') return mysqlGetCustomers(queryParams);
-  return mongoGetCustomers(queryParams);
-};
-
-const getStats = async () => {
-  if (config.dbProvider === 'mysql') return mysqlGetStats();
-  return mongoGetStats();
-};
-
-const getCustomerById = async (id) => {
-  if (config.dbProvider === 'mysql') return mysqlGetCustomerById(id);
-  return mongoGetCustomerById(id);
-};
-
-const createCustomer = async (data, userId) => {
-  if (config.dbProvider === 'mysql') return mysqlCreateCustomer(data, userId);
-  return mongoCreateCustomer(data, userId);
-};
-
-const updateCustomer = async (id, data, userId) => {
-  if (config.dbProvider === 'mysql') return mysqlUpdateCustomer(id, data, userId);
-  return mongoUpdateCustomer(id, data, userId);
-};
-
-const deleteCustomer = async (id) => {
-  if (config.dbProvider === 'mysql') return mysqlDeleteCustomer(id);
-  return mongoDeleteCustomer(id);
-};
-
-const changeStatus = async (id, isActive, userId) => {
-  if (config.dbProvider === 'mysql') return mysqlChangeStatus(id, isActive, userId);
-  return mongoChangeStatus(id, isActive, userId);
-};
+const getCustomers = (queryParams) => mysqlGetCustomers(queryParams);
+const getStats = () => mysqlGetStats();
+const getCustomerById = (id) => mysqlGetCustomerById(id);
+const createCustomer = (data, userId) => mysqlCreateCustomer(data, userId);
+const updateCustomer = (id, data, userId) => mysqlUpdateCustomer(id, data, userId);
+const deleteCustomer = (id) => mysqlDeleteCustomer(id);
+const changeStatus = (id, isActive, userId) => mysqlChangeStatus(id, isActive, userId);
 
 module.exports = {
   getCustomers,
@@ -488,3 +335,4 @@ module.exports = {
   deleteCustomer,
   changeStatus,
 };
+

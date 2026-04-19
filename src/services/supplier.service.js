@@ -1,10 +1,7 @@
-const Supplier = require('../models/Supplier');
 const ApiError = require('../utils/ApiError');
-const { paginate } = require('../helpers');
 const { SUPPLIER_TYPE } = require('../constants');
-const config = require('../config');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 
 const supplierTypes = Object.values(SUPPLIER_TYPE);
 
@@ -103,7 +100,7 @@ const mysqlCreateSupplier = async (data, userId) => {
     const [[codeRow]] = await pool.query('SELECT id FROM suppliers WHERE code = ? LIMIT 1', [data.code]);
     if (codeRow) throw ApiError.conflict('Supplier dengan kode tersebut sudah ada');
   }
-  const id = new mongoose.Types.ObjectId().toString();
+  const id = randomUUID();
   const code = data.code || await generateSupplierCode(pool);
   await pool.query(
     `INSERT INTO suppliers (id, code, name, type, phone, fax, address_street, address_city, address_province, izin_sarana_number, izin_sarana_expiry_date, cdob_cdakb_number, cdob_cdakb_expiry_date, sip_sik_number, sip_sik_expiry_date, payment_term_days, bank_name, bank_account_number, bank_account_name, notes, is_active, created_by, updated_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,NOW(),NOW())`,
@@ -155,98 +152,13 @@ const mysqlChangeStatus = async (id, isActive, userId) => {
   return mysqlGetSupplierById(id);
 };
 
-// ─── Mongo Implementations ───
-
-const mongoGetSuppliers = async (queryParams) => {
-  const { page, limit, search, type, city, isActive, sort } = queryParams;
-  const filter = {};
-  if (search) {
-    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [
-      { name: { $regex: escaped, $options: 'i' } }, { code: { $regex: escaped, $options: 'i' } },
-      { contactPerson: { $regex: escaped, $options: 'i' } }, { phone: { $regex: escaped, $options: 'i' } },
-    ];
-  }
-  if (type) filter.type = type;
-  if (city) filter['address.city'] = { $regex: city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-  if (typeof isActive !== 'undefined') filter.isActive = isActive === 'true' || isActive === true;
-  return paginate(Supplier, { filter, page, limit, sort: sort || '-createdAt' });
-};
-
-const mongoGetStats = async () => {
-  const now = new Date();
-  const ninetyDaysFromNow = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-  const [total, active, inactive, typeCounts, expiredLicense, nearExpiryLicense, cityCounts] = await Promise.all([
-    Supplier.countDocuments(), Supplier.countDocuments({ isActive: true }), Supplier.countDocuments({ isActive: false }),
-    Supplier.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }]),
-    Supplier.countDocuments({ 'izinSarana.expiryDate': { $lt: now, $ne: null } }),
-    Supplier.countDocuments({ 'izinSarana.expiryDate': { $gte: now, $lte: ninetyDaysFromNow } }),
-    Supplier.aggregate([{ $match: { 'address.city': { $ne: null, $ne: '' } } }, { $group: { _id: '$address.city', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
-  ]);
-  const typeStats = {}; for (const t of supplierTypes) typeStats[t] = 0;
-  for (const tc of typeCounts) { if (tc._id) typeStats[tc._id] = tc.count; }
-  const byCity = {}; let otherCount = 0;
-  cityCounts.forEach((c, i) => { if (i < 7) byCity[c._id] = c.count; else otherCount += c.count; });
-  if (otherCount > 0) byCity['Lainnya'] = otherCount;
-  return { total, active, inactive, ...typeStats, expiredLicense, nearExpiryLicense, byCity };
-};
-
-const mongoGetSupplierById = async (id) => {
-  const supplier = await Supplier.findById(id).populate('createdBy', 'name').populate('updatedBy', 'name');
-  if (!supplier) throw ApiError.notFound('Supplier tidak ditemukan');
-  return supplier;
-};
-
-const mongoCreateSupplier = async (data, userId) => {
-  const existingName = await Supplier.findOne({ name: { $regex: `^${data.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
-  if (existingName) throw ApiError.conflict('Supplier dengan nama tersebut sudah ada');
-  if (data.code) {
-    const existingCode = await Supplier.findOne({ code: data.code });
-    if (existingCode) throw ApiError.conflict('Supplier dengan kode tersebut sudah ada');
-  }
-  data.createdBy = userId; data.updatedBy = userId;
-  return Supplier.create(data);
-};
-
-const mongoUpdateSupplier = async (id, data, userId) => {
-  const supplier = await Supplier.findById(id);
-  if (!supplier) throw ApiError.notFound('Supplier tidak ditemukan');
-  if (data.name) {
-    const en = await Supplier.findOne({ _id: { $ne: id }, name: { $regex: `^${data.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
-    if (en) throw ApiError.conflict('Supplier dengan nama tersebut sudah ada');
-  }
-  if (data.code) {
-    const ec = await Supplier.findOne({ _id: { $ne: id }, code: data.code });
-    if (ec) throw ApiError.conflict('Supplier dengan kode tersebut sudah ada');
-  }
-  data.updatedBy = userId;
-  Object.assign(supplier, data);
-  await supplier.save();
-  return supplier;
-};
-
-const mongoDeleteSupplier = async (id) => {
-  const supplier = await Supplier.findById(id);
-  if (!supplier) throw ApiError.notFound('Supplier tidak ditemukan');
-  await supplier.deleteOne();
-};
-
-const mongoChangeStatus = async (id, isActive, userId) => {
-  const supplier = await Supplier.findById(id);
-  if (!supplier) throw ApiError.notFound('Supplier tidak ditemukan');
-  supplier.isActive = isActive; supplier.updatedBy = userId;
-  await supplier.save();
-  return supplier;
-};
-
-// ─── Exported Functions with Provider Branching ───
-
-const getSuppliers = async (q) => config.dbProvider === 'mysql' ? mysqlGetSuppliers(q) : mongoGetSuppliers(q);
-const getStats = async () => config.dbProvider === 'mysql' ? mysqlGetStats() : mongoGetStats();
-const getSupplierById = async (id) => config.dbProvider === 'mysql' ? mysqlGetSupplierById(id) : mongoGetSupplierById(id);
-const createSupplier = async (data, userId) => config.dbProvider === 'mysql' ? mysqlCreateSupplier(data, userId) : mongoCreateSupplier(data, userId);
-const updateSupplier = async (id, data, userId) => config.dbProvider === 'mysql' ? mysqlUpdateSupplier(id, data, userId) : mongoUpdateSupplier(id, data, userId);
-const deleteSupplier = async (id) => config.dbProvider === 'mysql' ? mysqlDeleteSupplier(id) : mongoDeleteSupplier(id);
-const changeStatus = async (id, isActive, userId) => config.dbProvider === 'mysql' ? mysqlChangeStatus(id, isActive, userId) : mongoChangeStatus(id, isActive, userId);
+const getSuppliers = (q) => mysqlGetSuppliers(q);
+const getStats = () => mysqlGetStats();
+const getSupplierById = (id) => mysqlGetSupplierById(id);
+const createSupplier = (data, userId) => mysqlCreateSupplier(data, userId);
+const updateSupplier = (id, data, userId) => mysqlUpdateSupplier(id, data, userId);
+const deleteSupplier = (id) => mysqlDeleteSupplier(id);
+const changeStatus = (id, isActive, userId) => mysqlChangeStatus(id, isActive, userId);
 
 module.exports = { getSuppliers, getStats, getSupplierById, createSupplier, updateSupplier, deleteSupplier, changeStatus };
+

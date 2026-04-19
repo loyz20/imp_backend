@@ -1,7 +1,7 @@
-﻿const { body, param } = require('express-validator');
+const { body, param } = require('express-validator');
 const { SELF_INSPECTION_SCHEDULE, CUSTOMER_TYPES, TIMEZONES, DATE_FORMATS, LANGUAGES, DOCUMENT_TYPES } = require('../constants');
 
-// ── Address fields helper ──
+// -- Address fields helper --
 const addressFields = (prefix) => [
   body(`${prefix}.street`).optional().isString().trim(),
   body(`${prefix}.city`).optional().isString().trim(),
@@ -10,7 +10,7 @@ const addressFields = (prefix) => [
   body(`${prefix}.country`).optional().isString().trim(),
 ];
 
-// ── License fields helper ──
+// -- License fields helper --
 const licenseFields = (prefix) => [
   body(`${prefix}.number`).optional({ values: 'falsy' }).isString().trim(),
   body(`${prefix}.issuedDate`).optional({ values: 'falsy' }).isISO8601().toDate(),
@@ -20,7 +20,7 @@ const licenseFields = (prefix) => [
 
 const updateCompany = [
   body('name').optional().isString().trim().isLength({ min: 1, max: 200 }).withMessage('Nama perusahaan harus 1-200 karakter'),
-  body('logo').optional().isString().trim(),
+  body('logo').optional({ values: 'null' }).isString().trim(),
   body('phone').optional().isString().trim().isLength({ max: 20 }),
   body('email').optional().isEmail().withMessage('Format email tidak valid').normalizeEmail(),
   body('website').optional().isString().trim(),
@@ -228,3 +228,5 @@ module.exports = {
   getSection,
   testSmtp,
 };
+
+

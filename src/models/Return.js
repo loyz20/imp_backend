@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const {
   RETURN_STATUS,
   RETURN_TYPE,
@@ -210,3 +210,4 @@ returnSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('Return', returnSchema);
+

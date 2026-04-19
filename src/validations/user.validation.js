@@ -2,7 +2,7 @@ const { body, param, query } = require('express-validator');
 const { USER_ROLES } = require('../constants');
 
 const userIdParam = [
-  param('id').isMongoId().withMessage('Invalid user ID format'),
+  param('id').isUUID().withMessage('Invalid user ID format'),
 ];
 
 const getUsers = [
@@ -161,3 +161,5 @@ module.exports = {
   changeRole,
   changeStatus,
 };
+
+

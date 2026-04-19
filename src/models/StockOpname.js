@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { Schema } = mongoose;
 const { OPNAME_STATUS, OPNAME_SCOPE } = require('../constants');
 
@@ -105,3 +105,4 @@ stockOpnameSchema.index({ opnameNumber: 'text' }, { name: 'opname_text_search' }
 const StockOpname = mongoose.model('StockOpname', stockOpnameSchema);
 
 module.exports = StockOpname;
+

@@ -1,217 +1,332 @@
-const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
-const { paginate } = require('../helpers');
 const config = require('../config');
-const MySQLUserService = require('./user.service.mysql');
+const { getMySQLPool } = require('../config/database');
+const { randomUUID } = require('crypto');
+const bcrypt = require('bcryptjs');
 
-// ─── Mongo Implementations ───
+const mapMysqlUserRow = (row) => ({
+  id: row.id,
+  _id: row.id,
+  name: row.name,
+  email: row.email,
+  phone: row.phone,
+  avatar: row.avatar,
+  role: row.role,
+  isActive: row.is_active === 1,
+  isEmailVerified: row.is_email_verified === 1,
+  address: row.address_street ? {
+    street: row.address_street,
+    city: row.address_city,
+    province: row.address_province,
+    postalCode: row.address_postal_code,
+    country: row.address_country,
+  } : {},
+  lastLoginAt: row.last_login_at,
+  lastLoginIp: row.last_login_ip,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
 
-const mongoGetUsers = async (queryParams) => {
-  const { page, limit, search, role, isActive, sort } = queryParams;
+const getUsers = async (query) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
 
-  const filter = {};
+  const { page = 1, limit = 10, role, isActive, search } = query;
+  const offset = (Number(page) - 1) * Number(limit);
+  let whereClause = [];
+  let params = [];
+
+  if (role) {
+    whereClause.push('role = ?');
+    params.push(role);
+  }
+
+  if (isActive !== undefined) {
+    whereClause.push('is_active = ?');
+    params.push(isActive ? 1 : 0);
+  }
 
   if (search) {
-    filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-    ];
+    whereClause.push('(name LIKE ? OR email LIKE ?)');
+    const searchLike = `%${search}%`;
+    params.push(searchLike, searchLike);
   }
 
-  if (role) filter.role = role;
+  const whereSQL = whereClause.length > 0 ? `WHERE ${whereClause.join(' AND ')}` : '';
 
-  if (typeof isActive !== 'undefined') {
-    filter.isActive = isActive === 'true' || isActive === true;
-  }
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM users ${whereSQL}`,
+    params,
+  );
 
-  return paginate(User, {
-    filter,
-    page,
-    limit,
-    sort: sort || '-createdAt',
-    select: '-password -refreshToken -passwordResetToken -passwordResetExpires -emailVerificationToken -emailVerificationExpires',
-  });
+  const [rows] = await pool.query(
+    `
+      SELECT * FROM users ${whereSQL}
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+    [...params, Number(limit), offset],
+  );
+
+  return {
+    docs: rows.map(mapMysqlUserRow),
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total: countRows[0].total,
+      pages: Math.ceil(countRows[0].total / Number(limit)),
+    },
+  };
 };
 
-const mongoGetUserById = async (userId) => {
-  const user = await User.findById(userId);
-  if (!user) {
+const getUserById = async (userId) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.notFound('User not found');
   }
-  return user;
+
+  return mapMysqlUserRow(rows[0]);
 };
 
-const mongoCreateUser = async (userData) => {
-  const existing = await User.findOne({ email: userData.email.toLowerCase() });
-  if (existing) {
-    throw ApiError.conflict('Email already registered');
+const createUser = async (userData, createdBy = 'SYSTEM') => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const { name, email, phone, password, role = 'user', isActive = true } = userData;
+
+  const [existingRows] = await pool.query(
+    'SELECT id FROM users WHERE email = ? LIMIT 1',
+    [email.toLowerCase()],
+  );
+
+  if (existingRows.length > 0) {
+    throw ApiError.conflict('Email already exists');
   }
 
-  const user = await User.create(userData);
-  return user;
+  const userId = randomUUID();
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  await pool.query(
+    `
+      INSERT INTO users (
+        id, name, email, phone, password_hash, role,
+        is_active, is_email_verified,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+    `,
+    [userId, name, email.toLowerCase(), phone || null, passwordHash, role, isActive ? 1 : 0],
+  );
+
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  return mapMysqlUserRow(rows[0]);
 };
 
-const mongoUpdateUser = async (userId, updateData) => {
-  delete updateData.password;
-  delete updateData.refreshToken;
-  delete updateData.passwordResetToken;
-  delete updateData.passwordResetExpires;
-  delete updateData.emailVerificationToken;
-  delete updateData.emailVerificationExpires;
-  delete updateData.loginAttempts;
-  delete updateData.lockUntil;
+const updateUser = async (userId, updateData) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
 
+  const [existingRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (existingRows.length === 0) {
+    throw ApiError.notFound('User not found');
+  }
+
+  const allowedFields = ['name', 'phone', 'role', 'isActive', 'address'];
+  const setClauses = [];
+  const values = [];
+
+  // Check email uniqueness if email is being updated
   if (updateData.email) {
-    const existing = await User.findOne({
-      email: updateData.email.toLowerCase(),
-      _id: { $ne: userId },
-    });
-    if (existing) {
+    const [emailRows] = await pool.query(
+      'SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1',
+      [updateData.email.toLowerCase(), userId],
+    );
+    if (emailRows.length > 0) {
       throw ApiError.conflict('Email already in use by another user');
+    }
+    setClauses.push('email = ?');
+    values.push(updateData.email.toLowerCase());
+  }
+
+  for (const key of allowedFields) {
+    if (updateData[key] !== undefined) {
+      if (key === 'address' && typeof updateData[key] === 'object') {
+        setClauses.push('address_street = ?, address_city = ?, address_province = ?, address_postal_code = ?, address_country = ?');
+        values.push(
+          updateData[key].street || null,
+          updateData[key].city || null,
+          updateData[key].province || null,
+          updateData[key].postalCode || null,
+          updateData[key].country || null,
+        );
+      } else if (key === 'isActive') {
+        setClauses.push('is_active = ?');
+        values.push(updateData[key] ? 1 : 0);
+      } else if (key !== 'address') {
+        setClauses.push(`${key} = ?`);
+        values.push(updateData[key]);
+      }
     }
   }
 
-  const user = await User.findByIdAndUpdate(
-    userId,
-    { $set: updateData },
-    { new: true, runValidators: true },
-  );
+  if (setClauses.length > 0) {
+    setClauses.push('updated_at = NOW()');
+    values.push(userId);
 
-  if (!user) {
-    throw ApiError.notFound('User not found');
+    await pool.query(
+      `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`,
+      values,
+    );
   }
 
-  return user;
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  return mapMysqlUserRow(rows[0]);
 };
 
-const mongoDeleteUser = async (userId, currentUserId) => {
+const deleteUser = async (userId, currentUserId) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
   if (userId === currentUserId) {
     throw ApiError.badRequest('You cannot delete your own account');
   }
 
-  const user = await User.findById(userId);
-  if (!user) {
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.notFound('User not found');
   }
 
-  user.isActive = false;
-  user.refreshToken = undefined;
-  await user.save({ validateModifiedOnly: true });
+  if (rows[0].is_system_user === 1) {
+    throw ApiError.badRequest('System users cannot be deleted');
+  }
 
-  return user;
+  // Soft delete: deactivate
+  await pool.query(
+    'UPDATE users SET is_active = 0, refresh_token = NULL WHERE id = ?',
+    [userId],
+  );
+
+  const [updatedRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  return mapMysqlUserRow(updatedRows[0]);
 };
 
-const mongoChangeRole = async (userId, role, currentUserId) => {
+const changeRole = async (userId, role, currentUserId) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
   if (userId === currentUserId) {
     throw ApiError.badRequest('You cannot change your own role');
   }
 
-  const user = await User.findById(userId);
-  if (!user) {
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.notFound('User not found');
   }
 
-  user.role = role;
-  await user.save({ validateModifiedOnly: true });
+  await pool.query(
+    'UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?',
+    [role, userId],
+  );
 
-  return user;
+  const [updatedRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  return mapMysqlUserRow(updatedRows[0]);
 };
 
-const mongoChangeStatus = async (userId, isActive, currentUserId) => {
+const changeStatus = async (userId, isActive, currentUserId) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
   if (userId === currentUserId) {
     throw ApiError.badRequest('You cannot change your own status');
   }
 
-  const user = await User.findById(userId);
-  if (!user) {
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
+
+  if (rows.length === 0) {
     throw ApiError.notFound('User not found');
   }
 
-  user.isActive = isActive;
+  const refreshToken = isActive ? null : null; // Clear token if deactivating
+  await pool.query(
+    'UPDATE users SET is_active = ?, refresh_token = NULL, updated_at = NOW() WHERE id = ?',
+    [isActive ? 1 : 0, userId],
+  );
 
-  if (!isActive) {
-    user.refreshToken = undefined;
-  }
+  const [updatedRows] = await pool.query(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [userId],
+  );
 
-  await user.save({ validateModifiedOnly: true });
-
-  return user;
+  return mapMysqlUserRow(updatedRows[0]);
 };
 
-const mongoGetUserStats = async () => {
-  const [total, active, inactive, roleStats] = await Promise.all([
-    User.countDocuments(),
-    User.countDocuments({ isActive: true }),
-    User.countDocuments({ isActive: false }),
-    User.aggregate([
-      { $group: { _id: '$role', count: { $sum: 1 } } },
-    ]),
-  ]);
+const searchUsers = async (term) => {
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
 
-  const byRole = {};
-  roleStats.forEach((r) => {
-    byRole[r._id] = r.count;
-  });
+  const searchLike = `%${term}%`;
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE name LIKE ? OR email LIKE ? LIMIT 20',
+    [searchLike, searchLike],
+  );
 
-  return { total, active, inactive, byRole };
-};
-
-// ─── Exported Functions with Provider Branching ───
-
-const getUsers = async (queryParams) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.getUsers(queryParams);
-  }
-  return mongoGetUsers(queryParams);
-};
-
-const getUserById = async (userId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.getUserById(userId);
-  }
-  return mongoGetUserById(userId);
-};
-
-const createUser = async (userData) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.createUser(userData);
-  }
-  return mongoCreateUser(userData);
-};
-
-const updateUser = async (userId, updateData) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.updateUser(userId, updateData);
-  }
-  return mongoUpdateUser(userId, updateData);
-};
-
-const deleteUser = async (userId, currentUserId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.deleteUser(userId, currentUserId);
-  }
-  return mongoDeleteUser(userId, currentUserId);
-};
-
-const changeRole = async (userId, role, currentUserId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.changeRole(userId, role, currentUserId);
-  }
-  return mongoChangeRole(userId, role, currentUserId);
-};
-
-const changeStatus = async (userId, isActive, currentUserId) => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.changeStatus(userId, isActive, currentUserId);
-  }
-  return mongoChangeStatus(userId, isActive, currentUserId);
+  return rows.map(mapMysqlUserRow);
 };
 
 const getUserStats = async () => {
-  if (config.dbProvider === 'mysql') {
-    return MySQLUserService.getUserStats();
-  }
-  return mongoGetUserStats();
+  const pool = getMySQLPool();
+  if (!pool) throw ApiError.internal('MySQL pool is not initialized');
+
+  const [[{ total }], [{ active }], [{ inactive }], roleStatsRows] = await Promise.all([
+    pool.query('SELECT COUNT(*) as total FROM users'),
+    pool.query('SELECT COUNT(*) as active FROM users WHERE is_active = 1'),
+    pool.query('SELECT COUNT(*) as inactive FROM users WHERE is_active = 0'),
+    pool.query('SELECT role, COUNT(*) as count FROM users GROUP BY role'),
+  ]);
+
+  const byRole = {};
+  roleStatsRows.forEach((r) => {
+    byRole[r.role] = r.count;
+  });
+
+  return { total, active, inactive, byRole };
 };
 
 module.exports = {
@@ -222,5 +337,6 @@ module.exports = {
   deleteUser,
   changeRole,
   changeStatus,
+  searchUsers,
   getUserStats,
 };

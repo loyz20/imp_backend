@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { ACCOUNT_CATEGORY } = require('../constants');
 
 const chartOfAccountSchema = new mongoose.Schema(
@@ -66,3 +66,4 @@ const chartOfAccountSchema = new mongoose.Schema(
 chartOfAccountSchema.index({ parentId: 1 });
 
 module.exports = mongoose.model('ChartOfAccount', chartOfAccountSchema);
+

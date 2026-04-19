@@ -1,0 +1,36 @@
+-- core table migration
+-- table: users
+
+CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR(36) NOT NULL,
+  name VARCHAR(200) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  phone VARCHAR(50) NULL,
+  avatar VARCHAR(500) NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(50) NOT NULL DEFAULT 'user',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  is_email_verified TINYINT(1) NOT NULL DEFAULT 0,
+  is_system_user TINYINT(1) NOT NULL DEFAULT 0,
+  address_street VARCHAR(255) NULL,
+  address_city VARCHAR(100) NULL,
+  address_province VARCHAR(100) NULL,
+  address_postal_code VARCHAR(20) NULL,
+  address_country VARCHAR(100) NULL,
+  refresh_token TEXT NULL,
+  login_attempts INT NOT NULL DEFAULT 0,
+  lock_until DATETIME NULL,
+  password_reset_token VARCHAR(255) NULL,
+  password_reset_expires DATETIME NULL,
+  email_verification_token VARCHAR(255) NULL,
+  email_verification_expires DATETIME NULL,
+  password_changed_at DATETIME NULL,
+  last_login_at DATETIME NULL,
+  last_login_ip VARCHAR(100) NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_users_email (email),
+  KEY idx_users_role (role),
+  KEY idx_users_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

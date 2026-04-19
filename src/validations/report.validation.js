@@ -59,7 +59,7 @@ const getSalesReport = [
     .withMessage('Status SO tidak valid'),
   query('customerId')
     .optional({ values: 'falsy' })
-    .isMongoId()
+    .isUUID()
     .withMessage('customerId tidak valid'),
 ];
 
@@ -68,7 +68,7 @@ const getSalesStats = [
   dateFromValidator,
   dateToValidator,
   query('status').optional({ values: 'falsy' }).isIn(Object.values(SO_STATUS)).withMessage('Status SO tidak valid'),
-  query('customerId').optional({ values: 'falsy' }).isMongoId().withMessage('customerId tidak valid'),
+  query('customerId').optional({ values: 'falsy' }).isUUID().withMessage('customerId tidak valid'),
 ];
 
 const getSalesChart = [...getSalesStats];
@@ -79,7 +79,7 @@ const exportSales = [
   dateToValidator,
   searchValidator,
   query('status').optional({ values: 'falsy' }).isIn(Object.values(SO_STATUS)).withMessage('Status SO tidak valid'),
-  query('customerId').optional({ values: 'falsy' }).isMongoId().withMessage('customerId tidak valid'),
+  query('customerId').optional({ values: 'falsy' }).isUUID().withMessage('customerId tidak valid'),
 ];
 
 // ─── Purchases ───
@@ -98,7 +98,7 @@ const getPurchasesReport = [
     .withMessage('Status PO tidak valid'),
   query('supplierId')
     .optional({ values: 'falsy' })
-    .isMongoId()
+    .isUUID()
     .withMessage('supplierId tidak valid'),
 ];
 
@@ -107,7 +107,7 @@ const getPurchasesStats = [
   dateFromValidator,
   dateToValidator,
   query('status').optional({ values: 'falsy' }).isIn(Object.values(PO_STATUS)).withMessage('Status PO tidak valid'),
-  query('supplierId').optional({ values: 'falsy' }).isMongoId().withMessage('supplierId tidak valid'),
+  query('supplierId').optional({ values: 'falsy' }).isUUID().withMessage('supplierId tidak valid'),
 ];
 
 const getPurchasesChart = [...getPurchasesStats];
@@ -118,7 +118,7 @@ const exportPurchases = [
   dateToValidator,
   searchValidator,
   query('status').optional({ values: 'falsy' }).isIn(Object.values(PO_STATUS)).withMessage('Status PO tidak valid'),
-  query('supplierId').optional({ values: 'falsy' }).isMongoId().withMessage('supplierId tidak valid'),
+  query('supplierId').optional({ values: 'falsy' }).isUUID().withMessage('supplierId tidak valid'),
 ];
 
 // ─── Stock ───
@@ -236,3 +236,5 @@ module.exports = {
   getExpiredChart,
   exportExpired,
 };
+
+

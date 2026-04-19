@@ -6,8 +6,8 @@ const validate = require('../middlewares/validate');
 const userValidation = require('../validations/user.validation');
 const { USER_ROLES } = require('../constants');
 
-// All user management routes require auth + superadmin/admin role
-router.use(auth, authorize(USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN));
+// All user management routes require auth + admin role
+router.use(auth, authorize(USER_ROLES.ADMIN));
 
 /**
  * @swagger

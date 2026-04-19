@@ -124,6 +124,12 @@ const getInvoiceById = catchAsync(async (req, res) => {
   ApiResponse.success(res, { data, message: 'Berhasil mengambil detail invoice' });
 });
 
+const getInvoiceByNumber = catchAsync(async (req, res) => {
+  const invoiceNumber = String(req.query.invoiceNumber || '').trim();
+  const data = await financeService.getInvoiceByNumber(invoiceNumber);
+  ApiResponse.success(res, { data, message: 'Berhasil mengambil detail invoice' });
+});
+
 module.exports = {
   getReceivables,
   createReceivablePayment,
@@ -145,4 +151,5 @@ module.exports = {
   getBankTransactions,
   createBankTransaction,
   getInvoiceById,
+  getInvoiceByNumber,
 };

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { MEMO_TYPE, MEMO_STATUS } = require('../constants');
 
 const memoItemSchema = new mongoose.Schema({
@@ -142,3 +142,4 @@ memoSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('Memo', memoSchema);
+

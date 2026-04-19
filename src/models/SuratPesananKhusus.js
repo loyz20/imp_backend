@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { SP_TYPE, SP_STATUS } = require('../constants');
 
 const spItemSchema = new mongoose.Schema(
@@ -144,3 +144,4 @@ suratPesananKhususSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('SuratPesananKhusus', suratPesananKhususSchema);
+

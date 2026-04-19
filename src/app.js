@@ -11,13 +11,23 @@ const { limiter } = require('./middlewares/rateLimiter');
 const errorHandler = require('./middlewares/errorHandler');
 const notFound = require('./middlewares/notFound');
 const routes = require('./routes');
-const swaggerSpec = require('./config/swagger');
 const config = require('./config');
+
+let swaggerSpec;
+if (config.env === 'development') {
+  const previousNoDeprecation = process.noDeprecation;
+  process.noDeprecation = true;
+  swaggerSpec = require('./config/swagger');
+  process.noDeprecation = previousNoDeprecation;
+}
 
 const app = express();
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  // Allow frontend (different origin/port) to load uploaded images.
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(corsMiddleware);
 app.use(limiter);
 
@@ -45,7 +55,11 @@ app.get('/health', (req, res) => {
 });
 
 // Static file serving for uploaded documents
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
 
 // API routes
 app.use('/api/v1', routes);

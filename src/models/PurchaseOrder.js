@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { PO_STATUS, SATUAN } = require('../constants');
 
 const poItemSchema = new mongoose.Schema({
@@ -192,3 +192,4 @@ purchaseOrderSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);
+

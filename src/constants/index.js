@@ -1,11 +1,9 @@
 const USER_ROLES = {
-  SUPERADMIN: 'superadmin',
   ADMIN: 'admin',
   APOTEKER: 'apoteker',
   KEUANGAN: 'keuangan',
   GUDANG: 'gudang',
   SALES: 'sales',
-  USER: 'user',
 };
 
 const PAGINATION = {
@@ -109,6 +107,7 @@ const SATUAN = [
 const SUPPLIER_TYPE = {
   PBF: 'pbf',
   DAK: 'dak',
+  PBF_DAK: 'pbf_dak',
   INDUSTRI: 'industri',
   IMPORTIR: 'importir',
   DISTRIBUTOR_ALKES: 'distributor_alkes',

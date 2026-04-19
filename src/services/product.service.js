@@ -1,9 +1,6 @@
-const Product = require('../models/Product');
 const ApiError = require('../utils/ApiError');
-const { paginate } = require('../helpers');
-const config = require('../config');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 
 const toBool = (value) => value === true || value === 1 || value === '1';
 
@@ -44,7 +41,7 @@ const mapMysqlProductRow = (row) => ({
   ppn: toBool(row.ppn),
   stokMinimum: Number(row.stok_minimum || 0),
   manufacturer: row.manufacturer,
-  keterangan: row.keterangan,
+  keterangan: row.keterangan ?? row.notes,
   isActive: toBool(row.is_active),
   createdBy: row.created_by_name ? { _id: row.created_by, name: row.created_by_name } : null,
   updatedBy: row.updated_by_name ? { _id: row.updated_by, name: row.updated_by_name } : null,
@@ -236,7 +233,7 @@ const mysqlCreateProduct = async (productData, userId) => {
     }
   }
 
-  const id = new mongoose.Types.ObjectId().toString();
+  const id = randomUUID();
   const sku = productData.sku || await generateMysqlSku(pool, productData.category);
 
   await pool.query(
@@ -248,8 +245,8 @@ const mysqlCreateProduct = async (productData, userId) => {
         ppn, stok_minimum,
         manufacturer,
         keterangan, is_active,
-        created_by, updated_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_by, updated_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `,
     [
       id,
@@ -387,231 +384,19 @@ const mysqlChangeStatus = async (productId, isActive, userId) => {
   return mysqlGetProductById(productId);
 };
 
-/**
- * Get paginated list of products with search & filter
- */
-const getProducts = async (queryParams) => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlGetProducts(queryParams);
-  }
+const getProducts = (queryParams) => mysqlGetProducts(queryParams);
 
-  const {
-    page, limit, search, category, golongan,
-    isActive, manufacturer, sort,
-  } = queryParams;
+const getProductStats = () => mysqlGetProductStats();
 
-  const filter = {};
+const getProductById = (productId) => mysqlGetProductById(productId);
 
-  if (search) {
-    filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { sku: { $regex: search, $options: 'i' } },
-      { nie: { $regex: search, $options: 'i' } },
-      { barcode: { $regex: search, $options: 'i' } },
-      { zatAktif: { $regex: search, $options: 'i' } },
-    ];
-  }
+const createProduct = (productData, userId) => mysqlCreateProduct(productData, userId);
 
-  if (category) filter.category = category;
-  if (golongan) filter.golongan = golongan;
-  if (manufacturer) filter.manufacturer = { $regex: manufacturer, $options: 'i' };
+const updateProduct = (productId, updateData, userId) => mysqlUpdateProduct(productId, updateData, userId);
 
-  if (typeof isActive !== 'undefined') {
-    filter.isActive = isActive === 'true' || isActive === true;
-  }
+const deleteProduct = (productId) => mysqlDeleteProduct(productId);
 
-  return paginate(Product, {
-    filter,
-    page,
-    limit,
-    sort: sort || '-createdAt',
-    populate: [
-      { path: 'createdBy', select: 'name' },
-      { path: 'updatedBy', select: 'name' },
-    ],
-  });
-};
-
-/**
- * Get product statistics for dashboard
- */
-const getProductStats = async () => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlGetProductStats();
-  }
-
-  const [statusStats, categoryStats, golonganStats] = await Promise.all([
-    Product.aggregate([
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          active: { $sum: { $cond: ['$isActive', 1, 0] } },
-          inactive: { $sum: { $cond: ['$isActive', 0, 1] } },
-        },
-      },
-    ]),
-    Product.aggregate([
-      { $group: { _id: '$category', count: { $sum: 1 } } },
-    ]),
-    Product.aggregate([
-      { $group: { _id: '$golongan', count: { $sum: 1 } } },
-    ]),
-  ]);
-
-  const base = statusStats[0] || { total: 0, active: 0, inactive: 0 };
-
-  const byCategory = {};
-  categoryStats.forEach((s) => { byCategory[s._id] = s.count; });
-
-  const byGolongan = {};
-  golonganStats.forEach((s) => { byGolongan[s._id] = s.count; });
-
-  return {
-    total: base.total,
-    active: base.active,
-    inactive: base.inactive,
-    byCategory,
-    byGolongan,
-  };
-};
-
-/**
- * Get single product by ID
- */
-const getProductById = async (productId) => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlGetProductById(productId);
-  }
-
-  const product = await Product.findById(productId)
-    .populate('createdBy', 'name')
-    .populate('updatedBy', 'name');
-
-  if (!product) {
-    throw ApiError.notFound('Product not found');
-  }
-
-  return product;
-};
-
-/**
- * Create a new product
- */
-const createProduct = async (productData, userId) => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlCreateProduct(productData, userId);
-  }
-
-  // Check duplicate name (case-insensitive)
-  const existingName = await Product.findOne({
-    name: { $regex: `^${productData.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-  });
-  if (existingName) {
-    throw ApiError.conflict('Product with this name already exists');
-  }
-
-  // Check duplicate SKU if provided
-  if (productData.sku) {
-    const existingSku = await Product.findOne({ sku: productData.sku });
-    if (existingSku) {
-      throw ApiError.conflict('SKU already exists');
-    }
-  }
-
-  productData.createdBy = userId;
-  productData.updatedBy = userId;
-
-  const product = await Product.create(productData);
-  return product;
-};
-
-/**
- * Update product by ID
- */
-const updateProduct = async (productId, updateData, userId) => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlUpdateProduct(productId, updateData, userId);
-  }
-
-  const product = await Product.findById(productId);
-  if (!product) {
-    throw ApiError.notFound('Product not found');
-  }
-
-  // Check duplicate name if being updated
-  if (updateData.name) {
-    const existingName = await Product.findOne({
-      name: { $regex: `^${updateData.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-      _id: { $ne: productId },
-    });
-    if (existingName) {
-      throw ApiError.conflict('Product with this name already exists');
-    }
-  }
-
-  // Check duplicate SKU if being updated
-  if (updateData.sku) {
-    const existingSku = await Product.findOne({
-      sku: updateData.sku,
-      _id: { $ne: productId },
-    });
-    if (existingSku) {
-      throw ApiError.conflict('SKU already exists');
-    }
-  }
-
-  updateData.updatedBy = userId;
-
-  const updated = await Product.findByIdAndUpdate(
-    productId,
-    { $set: updateData },
-    { new: true, runValidators: true },
-  )
-    .populate('createdBy', 'name')
-    .populate('updatedBy', 'name');
-
-  return updated;
-};
-
-/**
- * Delete product (soft delete)
- */
-const deleteProduct = async (productId) => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlDeleteProduct(productId);
-  }
-
-  const product = await Product.findById(productId);
-  if (!product) {
-    throw ApiError.notFound('Product not found');
-  }
-
-  product.isActive = false;
-  await product.save({ validateModifiedOnly: true });
-
-  return product;
-};
-
-/**
- * Change product status
- */
-const changeStatus = async (productId, isActive, userId) => {
-  if (config.dbProvider === 'mysql') {
-    return mysqlChangeStatus(productId, isActive, userId);
-  }
-
-  const product = await Product.findById(productId);
-  if (!product) {
-    throw ApiError.notFound('Product not found');
-  }
-
-  product.isActive = isActive;
-  product.updatedBy = userId;
-  await product.save({ validateModifiedOnly: true });
-
-  return product;
-};
+const changeStatus = (productId, isActive, userId) => mysqlChangeStatus(productId, isActive, userId);
 
 module.exports = {
   getProducts,
@@ -622,3 +407,4 @@ module.exports = {
   deleteProduct,
   changeStatus,
 };
+

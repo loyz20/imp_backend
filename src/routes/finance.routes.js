@@ -9,7 +9,7 @@ const financeValidation = require('../validations/finance.validation');
 const reportValidation = require('../validations/report.validation');
 const { USER_ROLES } = require('../constants');
 
-const { SUPERADMIN, ADMIN, KEUANGAN, SALES } = USER_ROLES;
+const { ADMIN, KEUANGAN, SALES } = USER_ROLES;
 
 // All finance routes require authentication
 router.use(auth);
@@ -17,28 +17,28 @@ router.use(auth);
 // ─── COA ───
 router.get(
   '/gl/accounts',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getAccounts),
   financeController.getChartOfAccounts,
 );
 
 router.post(
   '/gl/accounts',
-  authorize(SUPERADMIN, ADMIN),
+  authorize(ADMIN),
   validate(financeValidation.createAccount),
   financeController.createChartOfAccount,
 );
 
 router.put(
   '/gl/accounts/:id',
-  authorize(SUPERADMIN, ADMIN),
+  authorize(ADMIN),
   validate(financeValidation.updateAccount),
   financeController.updateChartOfAccount,
 );
 
 router.delete(
   '/gl/accounts/:id',
-  authorize(SUPERADMIN, ADMIN),
+  authorize(ADMIN),
   validate(financeValidation.idParam),
   financeController.deleteChartOfAccount,
 );
@@ -46,28 +46,28 @@ router.delete(
 // ─── JOURNAL & LEDGER ───
 router.get(
   '/gl/journals',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getJournals),
   financeController.getJournalEntries,
 );
 
 router.post(
   '/gl/journals/manual',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.createManualJournal),
   financeController.createManualJournal,
 );
 
 router.patch(
   '/gl/journals/:id/approve',
-  authorize(SUPERADMIN, ADMIN),
+  authorize(ADMIN),
   validate(financeValidation.approveManualJournal),
   financeController.approveManualJournal,
 );
 
 router.get(
   '/gl/ledger',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getLedger),
   financeController.getLedger,
 );
@@ -75,14 +75,14 @@ router.get(
 // ─── CASH & BANK ───
 router.get(
   '/bank-transactions',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getBankTransactions),
   financeController.getBankTransactions,
 );
 
 router.post(
   '/bank-transactions',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.createBankTransaction),
   financeController.createBankTransaction,
 );
@@ -90,29 +90,35 @@ router.post(
 // ─── PAYABLES ───
 router.get(
   '/payables',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getPayables),
   financeController.getPayables,
 );
 
 // ─── INVOICES ───
 router.get(
+  '/invoices/by-number',
+  authorize(ADMIN, KEUANGAN, SALES),
+  financeController.getInvoiceByNumber,
+);
+
+router.get(
   '/invoices/:id',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN, SALES),
+  authorize(ADMIN, KEUANGAN, SALES),
   validate(financeValidation.idParam),
   financeController.getInvoiceById,
 );
 
 router.post(
   '/payables',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.createPayablePayment),
   financeController.createPayablePayment,
 );
 
 router.post(
   '/payables/:id/pay',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.payPayable),
   financeController.payPayable,
 );
@@ -120,21 +126,21 @@ router.post(
 // ─── RECEIVABLES ───
 router.get(
   '/receivables',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN, SALES),
+  authorize(ADMIN, KEUANGAN, SALES),
   validate(financeValidation.getReceivables),
   financeController.getReceivables,
 );
 
 router.post(
   '/receivables',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.createReceivablePayment),
   financeController.createReceivablePayment,
 );
 
 router.post(
   '/receivables/:id/pay',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.payReceivable),
   financeController.payReceivable,
 );
@@ -142,28 +148,28 @@ router.post(
 // ─── REPORTS ───
 router.get(
   '/reports/balance-sheet',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getFinanceReport),
   financeController.getBalanceSheetReport,
 );
 
 router.get(
   '/reports/profit-loss',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getFinanceReport),
   financeController.getProfitLossReport,
 );
 
 router.get(
   '/reports/cash-flow',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getFinanceReport),
   financeController.getCashFlowReport,
 );
 
 router.get(
   '/reports/ledger',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(financeValidation.getLedger),
   financeController.getLedger,
 );
@@ -171,13 +177,13 @@ router.get(
 // ─── Dashboard (alias to report endpoints) ───
 router.get(
   '/dashboard/stats',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(reportValidation.getFinanceStats),
   reportController.getFinanceStats,
 );
 router.get(
   '/dashboard/chart',
-  authorize(SUPERADMIN, ADMIN, KEUANGAN),
+  authorize(ADMIN, KEUANGAN),
   validate(reportValidation.getFinanceChart),
   reportController.getFinanceChart,
 );

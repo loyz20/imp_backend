@@ -1,0 +1,35 @@
+-- core table migration
+-- table: suppliers
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id VARCHAR(36) NOT NULL,
+  code VARCHAR(100) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  phone VARCHAR(50) NULL,
+  fax VARCHAR(50) NULL,
+  address_street VARCHAR(255) NULL,
+  address_city VARCHAR(100) NULL,
+  address_province VARCHAR(100) NULL,
+  izin_sarana_number VARCHAR(100) NULL,
+  izin_sarana_expiry_date DATETIME NULL,
+  cdob_cdakb_number VARCHAR(100) NULL,
+  cdob_cdakb_expiry_date DATETIME NULL,
+  sip_sik_number VARCHAR(100) NULL,
+  sip_sik_expiry_date DATETIME NULL,
+  payment_term_days INT NOT NULL DEFAULT 30,
+  bank_name VARCHAR(100) NULL,
+  bank_account_number VARCHAR(100) NULL,
+  bank_account_name VARCHAR(150) NULL,
+  notes TEXT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_by VARCHAR(36) NULL,
+  updated_by VARCHAR(36) NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_suppliers_code (code),
+  KEY idx_suppliers_name (name),
+  KEY idx_suppliers_type (type),
+  KEY idx_suppliers_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

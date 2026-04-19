@@ -6,12 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed:users": "node src/seeds/user.seed.js",
-    "seed:users:force": "node src/seeds/user.seed.js --force",
-    "seed:products": "node src/seeds/product.seed.js",
-    "seed:products:force": "node src/seeds/product.seed.js --force",
-    "migrate:mongo:mysql": "node scripts/migrate-mongo-to-mysql.js",
-    "migrate:core:mysql": "node scripts/migrate-core-to-mysql.js",
+    "migrate": "node scripts/migrations/runMigrations.js",
+    "migrate:status": "node scripts/migrations/runMigrations.js --dry-run",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.js\""
@@ -34,7 +30,6 @@
     "helmet": "^8.1.0",
     "http-errors": "^2.0.1",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.3.3",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
     "mysql2": "^3.20.0",

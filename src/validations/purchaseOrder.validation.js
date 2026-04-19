@@ -5,14 +5,14 @@ const poStatuses = Object.values(PO_STATUS);
 const satuanValues = SATUAN;
 
 const poIdParam = [
-  param('id').isMongoId().withMessage('Invalid purchase order ID'),
+  param('id').isUUID().withMessage('Invalid purchase order ID'),
 ];
 
 const createPurchaseOrder = [
   body('supplierId')
     .notEmpty()
     .withMessage('Supplier wajib dipilih')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   body('orderDate')
     .notEmpty()
@@ -38,7 +38,7 @@ const createPurchaseOrder = [
   body('items.*.productId')
     .notEmpty()
     .withMessage('Product wajib dipilih')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .notEmpty()
@@ -70,7 +70,7 @@ const updatePurchaseOrder = [
   ...poIdParam,
   body('supplierId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   body('orderDate')
     .optional()
@@ -95,7 +95,7 @@ const updatePurchaseOrder = [
     .withMessage('Minimal 1 item harus ditambahkan'),
   body('items.*.productId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .optional()
@@ -144,7 +144,7 @@ const getPurchaseOrders = [
     if (invalid.length) throw new Error(`Status tidak valid: ${invalid.join(', ')}. Pilihan: ${poStatuses.join(', ')}`);
     return true;
   }),
-  query('supplierId').optional().isMongoId().withMessage('Invalid supplier ID'),
+  query('supplierId').optional().isUUID().withMessage('Invalid supplier ID'),
   query('dateFrom').optional().isISO8601().withMessage('Format dateFrom tidak valid'),
   query('dateTo').optional().isISO8601().withMessage('Format dateTo tidak valid'),
   query('sort').optional().trim().isLength({ max: 50 }).withMessage('Sort maksimal 50 karakter'),
@@ -157,3 +157,5 @@ module.exports = {
   changeStatus,
   getPurchaseOrders,
 };
+
+

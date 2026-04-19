@@ -8,7 +8,7 @@ const validate = require('../middlewares/validate');
 const regulationValidation = require('../validations/regulation.validation');
 const { USER_ROLES, UPLOAD } = require('../constants');
 
-const { SUPERADMIN, ADMIN, APOTEKER, GUDANG, SALES, KEUANGAN, USER } = USER_ROLES;
+const { ADMIN, APOTEKER, GUDANG, SALES, KEUANGAN, USER } = USER_ROLES;
 
 // ─── Multer config for document upload ───
 const storage = multer.diskStorage({
@@ -46,33 +46,33 @@ router.use(auth);
 
 router.get(
   '/sp/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+  authorize(ADMIN, APOTEKER, GUDANG),
   regulationController.getSPStats,
 );
 
 router
   .route('/sp')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+    authorize(ADMIN, APOTEKER, GUDANG),
     validate(regulationValidation.getSPList),
     regulationController.getSPList,
   )
   .post(
-    authorize(SUPERADMIN, ADMIN, APOTEKER),
+    authorize(ADMIN, APOTEKER),
     validate(regulationValidation.createSP),
     regulationController.createSP,
   );
 
 router.get(
   '/sp/:id',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+  authorize(ADMIN, APOTEKER, GUDANG),
   validate(regulationValidation.spIdParam),
   regulationController.getSPById,
 );
 
 router.patch(
   '/sp/:id/status',
-  authorize(SUPERADMIN, ADMIN, APOTEKER),
+  authorize(ADMIN, APOTEKER),
   validate(regulationValidation.updateSPStatus),
   regulationController.updateSPStatus,
 );
@@ -83,27 +83,27 @@ router.patch(
 
 router.get(
   '/ereport/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+  authorize(ADMIN, APOTEKER, GUDANG),
   regulationController.getEReportStats,
 );
 
 router.get(
   '/ereport',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+  authorize(ADMIN, APOTEKER, GUDANG),
   validate(regulationValidation.getEReports),
   regulationController.getEReports,
 );
 
 router.post(
   '/ereport/generate',
-  authorize(SUPERADMIN, ADMIN, APOTEKER),
+  authorize(ADMIN, APOTEKER),
   validate(regulationValidation.generateEReport),
   regulationController.generateEReport,
 );
 
 router.post(
   '/ereport/:id/submit',
-  authorize(SUPERADMIN, ADMIN, APOTEKER),
+  authorize(ADMIN, APOTEKER),
   validate(regulationValidation.ereportIdParam),
   regulationController.submitEReport,
 );
@@ -114,19 +114,19 @@ router.post(
 
 router.get(
   '/documents/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, SALES, KEUANGAN, USER),
+  authorize(ADMIN, APOTEKER, GUDANG, SALES, KEUANGAN, USER),
   regulationController.getDocStats,
 );
 
 router.get(
   '/documents',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, SALES, KEUANGAN, USER),
+  authorize(ADMIN, APOTEKER, GUDANG, SALES, KEUANGAN, USER),
   regulationController.getDocuments,
 );
 
 router.post(
   '/documents/:id/upload',
-  authorize(SUPERADMIN, ADMIN),
+  authorize(ADMIN),
   validate(regulationValidation.docIdParam),
   upload.single('file'),
   regulationController.uploadDocument,

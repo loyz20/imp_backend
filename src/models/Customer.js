@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { CUSTOMER_TYPE } = require('../constants');
 
 const addressSchema = new mongoose.Schema(
@@ -91,6 +91,18 @@ const customerSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 30,
+      default: null,
+    },
+    eReportCode: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: null,
+    },
+    bpomCode: {
+      type: String,
+      trim: true,
+      maxlength: 100,
       default: null,
     },
 
@@ -207,3 +219,4 @@ customerSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('Customer', customerSchema);
+

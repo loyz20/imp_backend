@@ -1,7 +1,7 @@
 const ApiError = require('../utils/ApiError');
 const config = require('../config');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const mapMysqlUserRow = (row) => ({
@@ -110,7 +110,7 @@ const createUser = async (userData, createdBy = 'SYSTEM') => {
     throw ApiError.conflict('Email already exists');
   }
 
-  const userId = new mongoose.Types.ObjectId().toString();
+  const userId = randomUUID();
   const passwordHash = await bcrypt.hash(password, 12);
 
   await pool.query(
@@ -336,3 +336,5 @@ module.exports = {
   searchUsers,
   getUserStats,
 };
+
+

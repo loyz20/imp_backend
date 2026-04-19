@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { Schema } = mongoose;
 const { encrypt } = require('../utils/crypto');
 
@@ -355,3 +355,4 @@ settingsSchema.methods.toJSON = function () {
 const AppSetting = mongoose.model('AppSetting', settingsSchema);
 
 module.exports = AppSetting;
+

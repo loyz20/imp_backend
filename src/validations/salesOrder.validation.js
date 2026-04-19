@@ -5,7 +5,7 @@ const soStatuses = Object.values(SO_STATUS);
 const satuanValues = SATUAN;
 
 const soIdParam = [
-  param('id').isMongoId().withMessage('Invalid sales order ID'),
+  param('id').isUUID().withMessage('Invalid sales order ID'),
 ];
 
 const createSalesOrder = [
@@ -17,7 +17,7 @@ const createSalesOrder = [
   body('customerId')
     .notEmpty()
     .withMessage('Customer wajib dipilih')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid customer ID'),
   body('orderDate')
     .notEmpty()
@@ -57,7 +57,7 @@ const createSalesOrder = [
   body('items.*.productId')
     .notEmpty()
     .withMessage('Product wajib dipilih')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .notEmpty()
@@ -103,7 +103,7 @@ const updateSalesOrder = [
     .withMessage('Nomor surat jalan maksimal 100 karakter'),
   body('customerId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid customer ID'),
   body('orderDate')
     .optional()
@@ -143,7 +143,7 @@ const updateSalesOrder = [
     }),
   body('items.*.productId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .optional()
@@ -182,7 +182,7 @@ const generateInvoice = [
     .isArray({ min: 1 })
     .withMessage('Minimal 1 surat jalan harus dipilih'),
   body('salesOrderIds.*')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid sales order ID'),
 ];
 
@@ -224,7 +224,7 @@ const getSalesOrders = [
     }),
   query('customerId')
     .optional({ values: 'falsy' })
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid customer ID'),
   query('dateFrom')
     .optional({ values: 'falsy' })
@@ -249,3 +249,5 @@ module.exports = {
   changeStatus,
   getSalesOrders,
 };
+
+

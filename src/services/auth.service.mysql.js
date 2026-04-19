@@ -4,7 +4,6 @@ const bcrypt = require('bcryptjs');
 const ApiError = require('../utils/ApiError');
 const config = require('../config');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
 
 const mapMysqlUserRow = (row) => ({
   id: row.id,
@@ -51,7 +50,7 @@ const register = async ({ name, email, password }) => {
     throw ApiError.conflict('Email already registered');
   }
 
-  const userId = new mongoose.Types.ObjectId().toString();
+  const userId = crypto.randomUUID();
   const passwordHash = await bcrypt.hash(password, 12);
   const tokens = generateTokens(userId, 'user');
   const emailVerificationToken = crypto.randomBytes(32).toString('hex');
@@ -437,3 +436,6 @@ module.exports = {
   verifyEmail,
   resendEmailVerification,
 };
+
+
+

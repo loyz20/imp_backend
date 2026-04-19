@@ -15,7 +15,7 @@ const reportPeriods = ['current_month', 'last_month', 'current_year', 'custom'];
 // ─── Common Param Validators ───
 
 const idParam = [
-  param('id').isMongoId().withMessage('Invalid ID'),
+  param('id').isUUID().withMessage('Invalid ID'),
 ];
 
 // ─── Receivable / Payable Validators ───
@@ -73,24 +73,24 @@ const receivableOrPayablePaymentBody = [
 const createReceivablePayment = [
   body('invoiceId')
     .notEmpty().withMessage('invoiceId wajib diisi')
-    .isMongoId().withMessage('Invalid invoice ID'),
+    .isUUID().withMessage('Invalid invoice ID'),
   ...receivableOrPayablePaymentBody,
 ];
 
 const payReceivable = [
-  param('id').isMongoId().withMessage('Invalid receivable invoice ID'),
+  param('id').isUUID().withMessage('Invalid receivable invoice ID'),
   ...receivableOrPayablePaymentBody,
 ];
 
 const createPayablePayment = [
   body('invoiceId')
     .notEmpty().withMessage('invoiceId wajib diisi')
-    .isMongoId().withMessage('Invalid payable invoice ID'),
+    .isUUID().withMessage('Invalid payable invoice ID'),
   ...receivableOrPayablePaymentBody,
 ];
 
 const payPayable = [
-  param('id').isMongoId().withMessage('Invalid payable invoice ID'),
+  param('id').isUUID().withMessage('Invalid payable invoice ID'),
   ...receivableOrPayablePaymentBody,
 ];
 
@@ -116,7 +116,7 @@ const createAccount = [
     .isIn(accountCategories).withMessage(`Kategori harus salah satu dari: ${accountCategories.join(', ')}`),
   body('parentId')
     .optional({ values: 'falsy' })
-    .isMongoId().withMessage('Invalid parent account ID'),
+    .isUUID().withMessage('Invalid parent account ID'),
   body('description')
     .optional({ values: 'falsy' })
     .trim()
@@ -127,7 +127,7 @@ const createAccount = [
 ];
 
 const updateAccount = [
-  param('id').isMongoId().withMessage('Invalid account ID'),
+  param('id').isUUID().withMessage('Invalid account ID'),
   body('code')
     .optional({ values: 'falsy' })
     .trim()
@@ -141,7 +141,7 @@ const updateAccount = [
     .isIn(accountCategories).withMessage(`Kategori harus salah satu dari: ${accountCategories.join(', ')}`),
   body('parentId')
     .optional({ values: 'falsy' })
-    .isMongoId().withMessage('Invalid parent account ID'),
+    .isUUID().withMessage('Invalid parent account ID'),
   body('description')
     .optional({ values: 'falsy' })
     .trim()
@@ -178,7 +178,7 @@ const createManualJournal = [
     .isArray({ min: 2 }).withMessage('Minimal 2 baris jurnal wajib diisi'),
   body('entries.*.accountId')
     .notEmpty().withMessage('Account ID wajib diisi')
-    .isMongoId().withMessage('Account ID tidak valid'),
+    .isUUID().withMessage('Account ID tidak valid'),
   body('entries.*.debit')
     .optional({ values: 'falsy' })
     .isFloat({ min: 0 }).withMessage('Nilai debit tidak valid'),
@@ -221,7 +221,7 @@ const createManualJournal = [
 ];
 
 const approveManualJournal = [
-  param('id').isMongoId().withMessage('Invalid journal ID'),
+  param('id').isUUID().withMessage('Invalid journal ID'),
   body('notes')
     .optional({ values: 'falsy' })
     .trim()
@@ -231,7 +231,7 @@ const approveManualJournal = [
 const getLedger = [
   query('accountId')
     .notEmpty().withMessage('accountId wajib diisi')
-    .isMongoId().withMessage('Invalid account ID'),
+    .isUUID().withMessage('Invalid account ID'),
   query('period').optional({ values: 'falsy' }).isIn(reportPeriods),
   query('dateFrom').optional({ values: 'falsy' }).isISO8601(),
   query('dateTo').optional({ values: 'falsy' }).isISO8601(),
@@ -313,3 +313,4 @@ module.exports = {
   getBankTransactions,
   createBankTransaction,
 };
+

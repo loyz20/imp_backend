@@ -43,7 +43,7 @@ const createSP = [
   body('supplier')
     .notEmpty()
     .withMessage('Supplier is required')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   body('items')
     .isArray({ min: 1 })
@@ -51,7 +51,7 @@ const createSP = [
   body('items.*.product')
     .notEmpty()
     .withMessage('Product is required')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.qty')
     .notEmpty()
@@ -77,7 +77,7 @@ const createSP = [
 ];
 
 const spIdParam = [
-  param('id').isMongoId().withMessage('Invalid SP ID'),
+  param('id').isUUID().withMessage('Invalid SP ID'),
 ];
 
 const updateSPStatus = [
@@ -134,7 +134,7 @@ const generateEReport = [
 ];
 
 const ereportIdParam = [
-  param('id').isMongoId().withMessage('Invalid e-Report ID'),
+  param('id').isUUID().withMessage('Invalid e-Report ID'),
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -142,7 +142,7 @@ const ereportIdParam = [
 // ═══════════════════════════════════════════════════════════════
 
 const docIdParam = [
-  param('id').isMongoId().withMessage('Invalid document ID'),
+  param('id').isUUID().withMessage('Invalid document ID'),
 ];
 
 module.exports = {
@@ -155,3 +155,5 @@ module.exports = {
   ereportIdParam,
   docIdParam,
 };
+
+

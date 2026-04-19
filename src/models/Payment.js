@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const {
   FINANCE_PAYMENT_STATUS,
   PAYMENT_TYPE,
@@ -163,3 +163,4 @@ paymentSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('Payment', paymentSchema);
+

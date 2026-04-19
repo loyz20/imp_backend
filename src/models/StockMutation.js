@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { Schema } = mongoose;
 const { MUTATION_TYPE, MUTATION_REFERENCE_TYPE } = require('../constants');
 
@@ -106,3 +106,4 @@ stockMutationSchema.index(
 const StockMutation = mongoose.model('StockMutation', stockMutationSchema);
 
 module.exports = StockMutation;
+

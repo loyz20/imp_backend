@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { MATCH_STATUS } = require('../constants');
 
 const bankTransactionSchema = new mongoose.Schema(
@@ -76,3 +76,4 @@ bankTransactionSchema.index({ date: -1 });
 bankTransactionSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('BankTransaction', bankTransactionSchema);
+

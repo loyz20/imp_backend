@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { SP_TYPE, EREPORT_STATUS } = require('../constants');
 
 const ereportItemSchema = new mongoose.Schema(
@@ -119,3 +119,4 @@ ereportSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('EReport', ereportSchema);
+

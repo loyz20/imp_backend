@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { INVOICE_STATUS, SATUAN } = require('../constants');
 
 const ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
@@ -226,3 +226,4 @@ invoiceSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);
+

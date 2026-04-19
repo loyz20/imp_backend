@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { SUPPLIER_TYPE } = require('../constants');
 
 const addressSchema = new mongoose.Schema(
@@ -168,3 +168,4 @@ supplierSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('Supplier', supplierSchema);
+

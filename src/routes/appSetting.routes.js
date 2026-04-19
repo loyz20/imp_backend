@@ -6,8 +6,8 @@ const c = require('../controllers/appSetting.controller');
 const v = require('../validations/appSetting.validation');
 const { USER_ROLES } = require('../constants');
 
-// All routes require auth + superadmin/admin (except reset which is superadmin only)
-router.use(auth, authorize(USER_ROLES.SUPERADMIN, USER_ROLES.ADMIN));
+// All routes require auth + admin
+router.use(auth, authorize(USER_ROLES.ADMIN));
 
 // ── Read ──
 router.get('/', c.getSettings);
@@ -42,7 +42,7 @@ router.put('/general', validate(v.updateGeneral), c.updateGeneral);
 
 // ── Document Number ──
 router.post('/doc-number/:type', validate(v.generateDocNumber), c.generateDocNumber);
-router.put('/doc-number/:type/reset', authorize(USER_ROLES.SUPERADMIN), validate(v.resetDocNumber), c.resetDocNumber);
+router.put('/doc-number/:type/reset', authorize(USER_ROLES.ADMIN), validate(v.resetDocNumber), c.resetDocNumber);
 
 // ── SMTP Test ──
 router.post('/test-smtp', validate(v.testSmtp), c.testSmtp);

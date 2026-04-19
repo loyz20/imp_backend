@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { SO_STATUS, SATUAN } = require('../constants');
 
 const soItemSchema = new mongoose.Schema({
@@ -200,3 +200,4 @@ salesOrderSchema.pre('save', async function () {
 });
 
 module.exports = mongoose.model('SalesOrder', salesOrderSchema);
+

@@ -6,7 +6,7 @@ const validate = require('../middlewares/validate');
 const grValidation = require('../validations/goodsReceiving.validation');
 const { USER_ROLES } = require('../constants');
 
-const { SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
+const { ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES } = USER_ROLES;
 
 // All routes require authentication
 router.use(auth);
@@ -68,7 +68,7 @@ router.use(auth);
  */
 router.get(
   '/stats',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+  authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
   grController.getStats,
 );
 
@@ -139,7 +139,7 @@ router.get(
  */
 router.get(
   '/available-pos',
-  authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG),
+  authorize(ADMIN, APOTEKER, GUDANG),
   validate(grValidation.getAvailablePOs),
   grController.getAvailablePOs,
 );
@@ -267,12 +267,12 @@ router.get(
 router
   .route('/')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+    authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
     validate(grValidation.getGoodsReceivings),
     grController.getGoodsReceivings,
   )
   .post(
-    authorize(SUPERADMIN, ADMIN, GUDANG),
+    authorize(ADMIN, GUDANG),
     validate(grValidation.createGoodsReceiving),
     grController.createGoodsReceiving,
   );
@@ -388,17 +388,17 @@ router
 router
   .route('/:id')
   .get(
-    authorize(SUPERADMIN, ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
+    authorize(ADMIN, APOTEKER, GUDANG, KEUANGAN, SALES),
     validate(grValidation.grIdParam),
     grController.getGoodsReceivingById,
   )
   .put(
-    authorize(SUPERADMIN, ADMIN, GUDANG),
+    authorize(ADMIN, GUDANG),
     validate(grValidation.updateGoodsReceiving),
     grController.updateGoodsReceiving,
   )
   .delete(
-    authorize(SUPERADMIN, ADMIN, GUDANG),
+    authorize(ADMIN, GUDANG),
     validate(grValidation.grIdParam),
     grController.deleteGoodsReceiving,
   );
@@ -455,7 +455,7 @@ router
  */
 router.patch(
   '/:id/verify',
-  authorize(SUPERADMIN, ADMIN, APOTEKER),
+  authorize(ADMIN, APOTEKER),
   validate(grValidation.verify),
   grController.verifyGoodsReceiving,
 );

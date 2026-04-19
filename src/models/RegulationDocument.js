@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require('../utils/mongooseShim');
 const { REG_DOC_CATEGORY, REG_DOC_TYPE, REG_DOC_STATUS } = require('../constants');
 
 const regulationDocumentSchema = new mongoose.Schema(
@@ -128,3 +128,4 @@ regulationDocumentSchema.methods.computeStatus = function () {
 };
 
 module.exports = mongoose.model('RegulationDocument', regulationDocumentSchema);
+

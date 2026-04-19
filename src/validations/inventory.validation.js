@@ -11,11 +11,11 @@ const expiryStatuses = Object.values(EXPIRY_STATUS);
 // ─── Shared ───
 
 const productIdParam = [
-  param('productId').isMongoId().withMessage('Invalid product ID'),
+  param('productId').isUUID().withMessage('Invalid product ID'),
 ];
 
 const idParam = [
-  param('id').isMongoId().withMessage('Invalid ID'),
+  param('id').isUUID().withMessage('Invalid ID'),
 ];
 
 // ─── Stock ───
@@ -55,7 +55,7 @@ const getMutations = [
     if (invalid.length) throw new Error(`Type tidak valid: ${invalid.join(', ')}`);
     return true;
   }),
-  query('productId').optional({ values: 'falsy' }).isMongoId().withMessage('Invalid product ID'),
+  query('productId').optional({ values: 'falsy' }).isUUID().withMessage('Invalid product ID'),
   query('dateFrom').optional({ values: 'falsy' }).isISO8601().withMessage('Format dateFrom tidak valid'),
   query('dateTo').optional({ values: 'falsy' }).isISO8601().withMessage('Format dateTo tidak valid'),
   query('sort').optional().trim().isLength({ max: 50 }),
@@ -65,8 +65,8 @@ const createMutation = [
   body('type')
     .notEmpty().withMessage('Type wajib diisi')
     .isIn(manualMutationTypes).withMessage(`Type harus salah satu dari: ${manualMutationTypes.join(', ')}`),
-  body('productId').notEmpty().withMessage('Product ID wajib diisi').isMongoId().withMessage('Invalid product ID'),
-  body('batchId').notEmpty().withMessage('Batch ID wajib diisi').isMongoId().withMessage('Invalid batch ID'),
+  body('productId').notEmpty().withMessage('Product ID wajib diisi').isUUID().withMessage('Invalid product ID'),
+  body('batchId').notEmpty().withMessage('Batch ID wajib diisi').isUUID().withMessage('Invalid batch ID'),
   body('quantity').notEmpty().withMessage('Quantity wajib diisi').isNumeric().withMessage('Quantity harus berupa angka'),
   body('reason').notEmpty().withMessage('Alasan wajib diisi untuk mutasi manual').isLength({ max: 500 }),
   body('notes').optional().isLength({ max: 1000 }),
@@ -93,7 +93,7 @@ const createOpname = [
   body('opnameDate').notEmpty().withMessage('Tanggal opname wajib diisi').isISO8601().withMessage('Format tanggal tidak valid'),
   body('scope').notEmpty().withMessage('Scope wajib diisi').isIn(opnameScopes).withMessage(`Scope harus: ${opnameScopes.join(', ')}`),
   body('scopeFilter').optional().isObject().withMessage('scopeFilter harus berupa object'),
-  body('assignedTo').optional().isMongoId().withMessage('Invalid user ID'),
+  body('assignedTo').optional().isUUID().withMessage('Invalid user ID'),
   body('notes').optional().isLength({ max: 1000 }),
 ];
 
@@ -101,8 +101,8 @@ const updateOpname = [
   ...idParam,
   body('status').optional().isIn([OPNAME_STATUS.IN_PROGRESS]).withMessage('Status hanya bisa diubah ke in_progress'),
   body('items').optional().isArray({ min: 1 }).withMessage('Items harus berupa array'),
-  body('items.*.productId').optional().isMongoId().withMessage('Invalid product ID'),
-  body('items.*.batchId').optional().isMongoId().withMessage('Invalid batch ID'),
+  body('items.*.productId').optional().isUUID().withMessage('Invalid product ID'),
+  body('items.*.batchId').optional().isUUID().withMessage('Invalid batch ID'),
   body('items.*.actualQty').optional().isInt({ min: 0 }).withMessage('Actual qty harus bilangan positif'),
   body('items.*.notes').optional().isLength({ max: 500 }),
   body('notes').optional().isLength({ max: 1000 }),
@@ -160,3 +160,5 @@ module.exports = {
   getStockCard,
   getExpired,
 };
+
+

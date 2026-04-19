@@ -1,12 +1,7 @@
-const PurchaseOrder = require('../models/PurchaseOrder');
-const Supplier = require('../models/Supplier');
-const Product = require('../models/Product');
 const ApiError = require('../utils/ApiError');
-const { paginate } = require('../helpers');
 const { PO_STATUS, GOLONGAN_ALKES } = require('../constants');
-const config = require('../config');
 const { getMySQLPool } = require('../config/database');
-const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 
 // ─── MySQL Helpers ───
 
@@ -40,7 +35,7 @@ const mapPoRow = (row, items = []) => ({
     receivedQty: i.received_qty, notes: i.notes,
   })),
   subtotal: Number(row.subtotal),
-  ppnAmount: Number(row.tax_amount),
+  ppnAmount: Number(row.tax_amount ?? row.ppn_amount ?? 0),
   totalAmount: Number(row.total_amount),
   paidAmount: Number(row.paid_amount),
   remainingAmount: Number(row.remaining_amount),
@@ -181,7 +176,7 @@ const mysqlGetPurchaseOrderById = async (id) => {
 };
 
 const mysqlCreateSinglePO = async (pool, data, items, category, userId) => {
-  const id = new mongoose.Types.ObjectId().toString();
+  const id = randomUUID();
   const poNumber = await generatePoNumber(pool, category);
   const status = PO_STATUS.DRAFT;
 
@@ -202,7 +197,7 @@ const mysqlCreateSinglePO = async (pool, data, items, category, userId) => {
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const itemId = new mongoose.Types.ObjectId().toString();
+    const itemId = randomUUID();
     // eslint-disable-next-line no-await-in-loop
     await pool.query(
       'INSERT INTO purchase_order_items (id, purchase_order_id, product_id, satuan, quantity, unit_price, discount, subtotal, received_qty, notes, sort_order) VALUES (?,?,?,?,?,?,?,?,0,?,?)',
@@ -279,7 +274,7 @@ const mysqlUpdatePurchaseOrder = async (id, data, userId) => {
     await pool.query('DELETE FROM purchase_order_items WHERE purchase_order_id = ?', [id]);
     for (let i = 0; i < data.items.length; i++) {
       const item = data.items[i];
-      const itemId = new mongoose.Types.ObjectId().toString();
+      const itemId = randomUUID();
       // eslint-disable-next-line no-await-in-loop
       await pool.query(
         'INSERT INTO purchase_order_items (id, purchase_order_id, product_id, satuan, quantity, unit_price, discount, subtotal, received_qty, notes, sort_order) VALUES (?,?,?,?,?,?,?,?,0,?,?)',
@@ -320,129 +315,13 @@ const mysqlChangeStatus = async (id, newStatus, notes, userId) => {
   return mysqlGetPurchaseOrderById(id);
 };
 
-// ─── Mongo Implementations ───
-
-const mongoPurchaseOrders = {
-  getPurchaseOrders: async (queryParams) => {
-    const { page, limit, search, status, supplierId, dateFrom, dateTo, sort } = queryParams;
-    const filter = {};
-    if (search) { const e = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); filter.$or = [{ poNumber: { $regex: e, $options: 'i' } }]; }
-    if (status) { const statuses = status.split(',').map((s) => s.trim()); filter.status = statuses.length > 1 ? { $in: statuses } : statuses[0]; }
-    if (supplierId) filter.supplierId = supplierId;
-    if (dateFrom || dateTo) { filter.orderDate = {}; if (dateFrom) filter.orderDate.$gte = new Date(dateFrom); if (dateTo) filter.orderDate.$lte = new Date(`${dateTo}T23:59:59.999Z`); }
-    return paginate(PurchaseOrder, {
-      filter, page, limit, sort: sort || '-createdAt',
-      populate: [
-        { path: 'supplierId', select: 'name code phone' },
-        { path: 'items.productId', select: 'name sku golongan nie manufacturer' },
-        { path: 'createdBy', select: 'name' }, { path: 'updatedBy', select: 'name' },
-      ],
-    });
-  },
-  getStats: async () => {
-    const now = new Date(); const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [total, statusCounts, totalValueResult, monthlyValueResult, topSuppliers] = await Promise.all([
-      PurchaseOrder.countDocuments(),
-      PurchaseOrder.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      PurchaseOrder.aggregate([{ $group: { _id: null, total: { $sum: '$totalAmount' } } }]),
-      PurchaseOrder.aggregate([{ $match: { orderDate: { $gte: startOfMonth } } }, { $group: { _id: null, total: { $sum: '$totalAmount' } } }]),
-      PurchaseOrder.aggregate([{ $group: { _id: '$supplierId', totalOrders: { $sum: 1 }, totalValue: { $sum: '$totalAmount' } } }, { $sort: { totalValue: -1 } }, { $limit: 3 }, { $lookup: { from: 'suppliers', localField: '_id', foreignField: '_id', as: 'supplier' } }, { $unwind: '$supplier' }, { $project: { supplierId: '$_id', name: '$supplier.name', totalOrders: 1, totalValue: 1 } }]),
-    ]);
-    const statusMap = {}; for (const s of statusCounts) statusMap[s._id] = s.count;
-    const totalValue = totalValueResult[0]?.total || 0; const totalValueThisMonth = monthlyValueResult[0]?.total || 0;
-    return { total, draft: statusMap[PO_STATUS.DRAFT] || 0, sent: statusMap[PO_STATUS.SENT] || 0, received: statusMap[PO_STATUS.RECEIVED] || 0, totalValue, totalValueThisMonth, avgOrderValue: total > 0 ? Math.round(totalValue / total) : 0, topSuppliers };
-  },
-  getPurchaseOrderById: async (id) => {
-    const po = await PurchaseOrder.findById(id).populate('supplierId', 'name code phone address izinSarana').populate('items.productId', 'name sku golongan nie manufacturer').populate('createdBy', 'name').populate('updatedBy', 'name');
-    if (!po) throw ApiError.notFound('Purchase order not found');
-    return po;
-  },
-  createPurchaseOrder: async (data, userId) => {
-    const supplier = await Supplier.findById(data.supplierId);
-    if (!supplier) throw ApiError.notFound('Supplier tidak ditemukan');
-    if (!supplier.isActive) throw ApiError.badRequest('Supplier tidak aktif');
-    const productIds = data.items.map((item) => item.productId);
-    const products = await Product.find({ _id: { $in: productIds } });
-    if (products.length !== productIds.length) throw ApiError.badRequest('Satu atau lebih produk tidak ditemukan');
-    const inactiveProduct = products.find((p) => !p.isActive);
-    if (inactiveProduct) throw ApiError.badRequest(`Produk "${inactiveProduct.name}" tidak aktif`);
-    const uniqueProducts = new Set(productIds.map(String));
-    if (uniqueProducts.size !== productIds.length) throw ApiError.badRequest('Tidak boleh ada produk duplikat dalam 1 PO');
-
-    // Classify items by category (obat / alkes)
-    const productMap = {};
-    for (const p of products) productMap[p._id.toString()] = p;
-    const obatItems = [];
-    const alkesItems = [];
-    for (const item of data.items) {
-      const product = productMap[item.productId.toString()];
-      if (isAlkesGolongan(product.golongan)) {
-        alkesItems.push(item);
-      } else {
-        obatItems.push(item);
-      }
-    }
-
-    const results = [];
-    const baseData = { ...data, status: PO_STATUS.DRAFT, createdBy: userId, updatedBy: userId };
-
-    if (obatItems.length > 0) {
-      const poData = { ...baseData, items: obatItems, poCategory: 'obat' };
-      const po = await PurchaseOrder.create(poData);
-      const populated = await PurchaseOrder.findById(po._id)
-        .populate('supplierId', 'name code phone address izinSarana')
-        .populate('items.productId', 'name sku golongan nie manufacturer')
-        .populate('createdBy', 'name').populate('updatedBy', 'name');
-      results.push(populated);
-    }
-    if (alkesItems.length > 0) {
-      const poData = { ...baseData, items: alkesItems, poCategory: 'alkes' };
-      const po = await PurchaseOrder.create(poData);
-      const populated = await PurchaseOrder.findById(po._id)
-        .populate('supplierId', 'name code phone address izinSarana')
-        .populate('items.productId', 'name sku golongan nie manufacturer')
-        .populate('createdBy', 'name').populate('updatedBy', 'name');
-      results.push(populated);
-    }
-    return results;
-  },
-  updatePurchaseOrder: async (id, data, userId) => {
-    const po = await PurchaseOrder.findById(id);
-    if (!po) throw ApiError.notFound('Purchase order not found');
-    if (po.status !== PO_STATUS.DRAFT) throw ApiError.badRequest('PO hanya dapat diedit saat berstatus draft');
-    if (data.supplierId) { const s = await Supplier.findById(data.supplierId); if (!s) throw ApiError.notFound('Supplier tidak ditemukan'); if (!s.isActive) throw ApiError.badRequest('Supplier tidak aktif'); }
-    if (data.items) {
-      const productIds = data.items.map((item) => item.productId);
-      const products = await Product.find({ _id: { $in: productIds } });
-      if (products.length !== productIds.length) throw ApiError.badRequest('Satu atau lebih produk tidak ditemukan');
-      const ip = products.find((p) => !p.isActive); if (ip) throw ApiError.badRequest(`Produk "${ip.name}" tidak aktif`);
-      if (new Set(productIds.map(String)).size !== productIds.length) throw ApiError.badRequest('Tidak boleh ada produk duplikat dalam 1 PO');
-    }
-    data.updatedBy = userId; Object.assign(po, data); await po.save(); return po;
-  },
-  deletePurchaseOrder: async (id) => {
-    const po = await PurchaseOrder.findById(id); if (!po) throw ApiError.notFound('Purchase order not found');
-    if (po.status !== PO_STATUS.DRAFT) throw ApiError.badRequest('PO hanya dapat dihapus saat berstatus draft');
-    await po.deleteOne();
-  },
-  changeStatus: async (id, newStatus, notes, userId) => {
-    const po = await PurchaseOrder.findById(id); if (!po) throw ApiError.notFound('Purchase order not found');
-    const transitions = { [PO_STATUS.DRAFT]: [PO_STATUS.SENT] };
-    const allowed = transitions[po.status]; if (!allowed || !allowed.includes(newStatus)) throw ApiError.badRequest(`Tidak dapat mengubah status dari '${po.status}' ke '${newStatus}'`);
-    if (newStatus === PO_STATUS.SENT && po.items.length === 0) throw ApiError.badRequest('PO harus memiliki minimal 1 item untuk dikirim');
-    po.status = newStatus; po.updatedBy = userId; if (newStatus === PO_STATUS.SENT) po.sentAt = new Date();
-    await po.save(); return po;
-  },
-};
-
-// ─── Exported Functions with Provider Branching ───
-
-const getPurchaseOrders = (q) => config.dbProvider === 'mysql' ? mysqlGetPurchaseOrders(q) : mongoPurchaseOrders.getPurchaseOrders(q);
-const getStats = () => config.dbProvider === 'mysql' ? mysqlGetStats() : mongoPurchaseOrders.getStats();
-const getPurchaseOrderById = (id) => config.dbProvider === 'mysql' ? mysqlGetPurchaseOrderById(id) : mongoPurchaseOrders.getPurchaseOrderById(id);
-const createPurchaseOrder = (data, userId) => config.dbProvider === 'mysql' ? mysqlCreatePurchaseOrder(data, userId) : mongoPurchaseOrders.createPurchaseOrder(data, userId);
-const updatePurchaseOrder = (id, data, userId) => config.dbProvider === 'mysql' ? mysqlUpdatePurchaseOrder(id, data, userId) : mongoPurchaseOrders.updatePurchaseOrder(id, data, userId);
-const deletePurchaseOrder = (id) => config.dbProvider === 'mysql' ? mysqlDeletePurchaseOrder(id) : mongoPurchaseOrders.deletePurchaseOrder(id);
-const changeStatus = (id, newStatus, notes, userId) => config.dbProvider === 'mysql' ? mysqlChangeStatus(id, newStatus, notes, userId) : mongoPurchaseOrders.changeStatus(id, newStatus, notes, userId);
+const getPurchaseOrders = (q) => mysqlGetPurchaseOrders(q);
+const getStats = () => mysqlGetStats();
+const getPurchaseOrderById = (id) => mysqlGetPurchaseOrderById(id);
+const createPurchaseOrder = (data, userId) => mysqlCreatePurchaseOrder(data, userId);
+const updatePurchaseOrder = (id, data, userId) => mysqlUpdatePurchaseOrder(id, data, userId);
+const deletePurchaseOrder = (id) => mysqlDeletePurchaseOrder(id);
+const changeStatus = (id, newStatus, notes, userId) => mysqlChangeStatus(id, newStatus, notes, userId);
 
 module.exports = { getPurchaseOrders, getStats, getPurchaseOrderById, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, changeStatus };
+

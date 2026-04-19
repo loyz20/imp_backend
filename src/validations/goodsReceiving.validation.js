@@ -6,17 +6,17 @@ const conditionStatuses = Object.values(GR_CONDITION_STATUS);
 const satuanValues = SATUAN;
 
 const grIdParam = [
-  param('id').isMongoId().withMessage('Invalid goods receiving ID'),
+  param('id').isUUID().withMessage('Invalid goods receiving ID'),
 ];
 
 const createGoodsReceiving = [
   body('purchaseOrderId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid purchase order ID'),
   body('supplierId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   body('receivingDate')
     .notEmpty()
@@ -57,7 +57,7 @@ const createGoodsReceiving = [
   body('items.*.productId')
     .notEmpty()
     .withMessage('Product wajib dipilih')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .notEmpty()
@@ -116,11 +116,11 @@ const updateGoodsReceiving = [
   ...grIdParam,
   body('purchaseOrderId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid purchase order ID'),
   body('supplierId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid supplier ID'),
   body('receivingDate')
     .optional()
@@ -160,7 +160,7 @@ const updateGoodsReceiving = [
     .withMessage('Minimal 1 item harus ditambahkan'),
   body('items.*.productId')
     .optional()
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid product ID'),
   body('items.*.satuan')
     .optional()
@@ -229,7 +229,7 @@ const getGoodsReceivings = [
     if (invalid.length) throw new Error(`Status tidak valid: ${invalid.join(', ')}. Pilihan: ${grStatuses.join(', ')}`);
     return true;
   }),
-  query('supplierId').optional().isMongoId().withMessage('Invalid supplier ID'),
+  query('supplierId').optional().isUUID().withMessage('Invalid supplier ID'),
   query('dateFrom').optional().isISO8601().withMessage('Format dateFrom tidak valid'),
   query('dateTo').optional().isISO8601().withMessage('Format dateTo tidak valid'),
   query('sort').optional().trim().isLength({ max: 50 }).withMessage('Sort maksimal 50 karakter'),
@@ -237,7 +237,7 @@ const getGoodsReceivings = [
 
 const getAvailablePOs = [
   query('search').optional().trim().isLength({ max: 200 }).withMessage('Search maksimal 200 karakter'),
-  query('supplierId').optional().isMongoId().withMessage('Invalid supplier ID'),
+  query('supplierId').optional().isUUID().withMessage('Invalid supplier ID'),
   query('page').optional().isInt({ min: 1 }).withMessage('Page harus bilangan positif'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit harus antara 1 dan 100'),
 ];
@@ -250,3 +250,5 @@ module.exports = {
   getGoodsReceivings,
   getAvailablePOs,
 };
+
+
